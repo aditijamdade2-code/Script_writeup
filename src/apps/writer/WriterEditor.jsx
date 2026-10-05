@@ -392,8 +392,11 @@ export default function WriterEditor({ bookId, onBackToBookshelf }) {
       const updatedList = currentList.map(img => {
         if (img.id === imgId) {
           const updated = { ...img, [key]: value };
+          if (key === 'align' && value === 'center') {
+            updated.x = 0; // Reset horizontal drag offset when selecting Center
+          }
           if (key === 'position') {
-            updated.y = 0; // Reset vertical drag offset on explicit position toggle (top / bottom)
+            updated.y = 0; // Reset vertical drag offset on position toggle
           }
           return updated;
         }
@@ -437,20 +440,14 @@ export default function WriterEditor({ bookId, onBackToBookshelf }) {
     const newX = dragStartPosRef.current.initialX + dx;
     const newY = dragStartPosRef.current.initialY + dy;
 
-    // Detect horizontal drag direction to dynamically shift alignment (left vs right)
-    let newAlign = img.align || 'left';
-    if (dx > 70) {
+    // Detect horizontal drag direction: only switch away from center if dragged significantly left or right
+    let newAlign = img.align || 'center';
+    if (dx > 120) {
       newAlign = 'right';
-    } else if (dx < -70) {
+    } else if (dx < -120) {
       newAlign = 'left';
-    }
-
-    // Detect vertical drag distance to dynamically switch between Top & Bottom sections if dragged far down/up
-    let newPosition = img.position || 'top';
-    if (dy > 180 && img.position !== 'bottom') {
-      newPosition = 'bottom';
-    } else if (dy < -180 && img.position === 'bottom') {
-      newPosition = 'top';
+    } else if (Math.abs(dx) < 60 && (img.align === 'center' || !img.align)) {
+      newAlign = 'center';
     }
 
     setPageImagesMap(prev => {
@@ -459,8 +456,7 @@ export default function WriterEditor({ bookId, onBackToBookshelf }) {
         ...item,
         x: newX,
         y: newY,
-        align: newAlign,
-        position: newPosition
+        align: newAlign
       } : item);
       return { ...prev, [selectedChapterId]: updatedList };
     });
