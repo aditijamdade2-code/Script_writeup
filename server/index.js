@@ -3,18 +3,32 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const writerRouter = require('./routes/writer');
-const readerRouter = require('./routes/reader');
+
+const fs = require('fs');
+
+const uploadsPath = process.env.VERCEL
+  ? path.join('/tmp', 'uploads')
+  : path.join(__dirname, '..', 'uploads');
+
+if (!fs.existsSync(uploadsPath)) {
+  try {
+    fs.mkdirSync(uploadsPath, { recursive: true });
+  } catch (err) {
+    console.error('Failed to create uploads directory:', err);
+  }
+}
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 
 // Middleware
 app.use(cors());
-app.use(express.json({ limit: '10mb' }));
+app.use(express.json({ limit: '100mb' }));
+app.use(express.urlencoded({ limit: '100mb', extended: true }));
+app.use('/uploads', express.static(uploadsPath));
 
 // API Routes
 app.use('/api/writer', writerRouter);
-app.use('/api/reader', readerRouter);
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -42,10 +56,14 @@ app.use((req, res, next) => {
   });
 });
 
-app.listen(PORT, () => {
-  console.log(`===========================================`);
-  console.log(` [Backend Server] Listening on http://localhost:${PORT}`);
-  console.log(` - Writer API: http://localhost:${PORT}/api/writer`);
-  console.log(` - Reader API: http://localhost:${PORT}/api/reader`);
-  console.log(`===========================================`);
-});
+if (!process.env.VERCEL) {
+  app.listen(PORT, () => {
+    console.log(`===========================================`);
+    console.log(` [Backend Server] Listening on http://localhost:${PORT}`);
+    console.log(` - Writer API: http://localhost:${PORT}/api/writer`);
+    console.log(`===========================================`);
+  });
+}
+
+module.exports = app;
+

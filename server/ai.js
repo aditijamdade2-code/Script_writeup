@@ -5,12 +5,12 @@ const { Anthropic } = require('@anthropic-ai/sdk');
  * Analyzes the text for pacing, imagery, dialogue, structure, and sensory elements,
  * extracting actual quotes from the author's text with insightful marginal notes.
  */
-function generateHeuristicSuggestions(title, text) {
+function generateHeuristicSuggestions(title, text, customPrompt) {
   if (!text || text.trim().length === 0) {
     return [
       {
         quote: title || "New Page",
-        note: "Add a paragraph or opening hook to receive pacing and imagery suggestions."
+        note: customPrompt ? `Focusing on "${customPrompt}": Add text to your page to get tailored feedback.` : "Add a paragraph or opening hook to receive pacing and imagery suggestions."
       }
     ];
   }
@@ -20,11 +20,6 @@ function generateHeuristicSuggestions(title, text) {
     .split(/(?<=[.?!])\s+/)
     .map(s => s.trim())
     .filter(s => s.length > 5);
-
-  const paragraphs = cleanText
-    .split(/\n\s*\n/)
-    .map(p => p.trim())
-    .filter(p => p.length > 0);
 
   const suggestions = [];
 
@@ -40,7 +35,59 @@ function generateHeuristicSuggestions(title, text) {
     }
   }
 
-  // 1. Opening hook check
+  // Tailored heuristic responses if customPrompt is provided
+  if (customPrompt && customPrompt.trim().length > 0) {
+    const promptLower = customPrompt.toLowerCase();
+
+    if (promptLower.includes('twist') || promptLower.includes('plot') || promptLower.includes('climax')) {
+      const midSentence = sentences[Math.floor(sentences.length / 2)] || sentences[0];
+      suggestions.push({
+        quote: getSubQuote(midSentence),
+        note: `Plot Twist Idea: Reveal an unexpected secret or hidden motive behind this line.`
+      });
+      if (sentences.length > 1) {
+        suggestions.push({
+          quote: getSubQuote(sentences[sentences.length - 1]),
+          note: `Cliffhanger Note: End this page on an unanswered question or sudden sensory disruption.`
+        });
+      }
+    } else if (promptLower.includes('dialogue') || promptLower.includes('voice') || promptLower.includes('speak')) {
+      const dialogueMatches = cleanText.match(/["“][^"”]+["”]/g);
+      if (dialogueMatches && dialogueMatches.length > 0) {
+        const shortQuote = dialogueMatches[0].replace(/["“”]/g, '').split(/\s+/).slice(0, 5).join(' ');
+        suggestions.push({
+          quote: shortQuote,
+          note: `Dialogue Polish: Consider adding subtle physical subtext or an unsaid implication.`
+        });
+      } else {
+        suggestions.push({
+          quote: getSubQuote(sentences[0]),
+          note: `Dialogue Suggestion: Break up this descriptive line with character dialogue to increase tension.`
+        });
+      }
+    } else if (promptLower.includes('sensory') || promptLower.includes('image') || promptLower.includes('describe')) {
+      suggestions.push({
+        quote: getSubQuote(sentences[0]),
+        note: `Sensory Feedback: Describe ambient sound or scent (woodsmoke, rain, cold air) here.`
+      });
+    } else {
+      // General custom prompt feedback
+      suggestions.push({
+        quote: getSubQuote(sentences[0]),
+        note: `Custom Feedback ("${customPrompt.trim().slice(0, 30)}..."): Strengthen opening impact.`
+      });
+      if (sentences.length > 1) {
+        suggestions.push({
+          quote: getSubQuote(sentences[Math.floor(sentences.length / 2)]),
+          note: `Custom Focus: Sharpen emotional resonance and paragraph flow.`
+        });
+      }
+    }
+
+    if (suggestions.length > 0) return suggestions.slice(0, 4);
+  }
+
+  // Standard heuristic critique check
   if (sentences.length > 0) {
     const firstSentence = sentences[0];
     const quote = getSubQuote(firstSentence);
@@ -74,7 +121,6 @@ function generateHeuristicSuggestions(title, text) {
     'velvet', 'rain', 'brass', 'scent', 'hollow', 'frost', 'crimson', 'shiver', 'stone',
     'cold', 'warm', 'light', 'dark', 'echo', 'metal', 'dust', 'crystal'
   ];
-  let sensoryFound = false;
   for (const sentence of sentences) {
     const lower = sentence.toLowerCase();
     const matchedWord = sensoryKeywords.find(kw => lower.includes(kw));
@@ -83,7 +129,6 @@ function generateHeuristicSuggestions(title, text) {
         quote: getSubQuote(sentence, true),
         note: `Vivid sensory anchor (${matchedWord}) that draws the reader into the scene.`
       });
-      sensoryFound = true;
       break;
     }
   }
@@ -120,7 +165,7 @@ function generateHeuristicSuggestions(title, text) {
 /**
  * Generate 3-5 marginal-note-style suggestions using Claude API or fallback.
  */
-async function generateSuggestions(title, text) {
+async function generateSuggestions(title, text, customPrompt) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
 
   if (apiKey && apiKey.trim() !== '') {
@@ -128,16 +173,18 @@ async function generateSuggestions(title, text) {
       const anthropic = new Anthropic({ apiKey });
       const prompt = `You are a master literary editor. Analyze this book chapter draft.
 Title: "${title || 'Untitled'}"
+${customPrompt ? `Author's Specific Instruction/Question: "${customPrompt}"` : ''}
+
 Chapter Content:
 """
 ${text}
 """
 
-Provide 3 to 5 short marginal-note-style suggestions about pacing, imagery, dialogue, or structure.
+Provide 3 to 5 short marginal-note-style suggestions ${customPrompt ? `specifically addressing the author's request: "${customPrompt}"` : 'about pacing, imagery, dialogue, or structure'}.
 Requirements:
 1. Each suggestion must include:
    - "quote": a short exact quote (3 to 6 words) from the chapter text that you are commenting on.
-   - "note": a brief editorial note (under 20 words).
+   - "note": a brief editorial note (under 25 words).
 2. Respond ONLY with a valid JSON array of objects with the keys "quote" and "note".
 Example format:
 [
@@ -169,7 +216,7 @@ Example format:
   }
 
   // Heuristic engine fallback
-  return generateHeuristicSuggestions(title, text);
+  return generateHeuristicSuggestions(title, text, customPrompt);
 }
 
 module.exports = {

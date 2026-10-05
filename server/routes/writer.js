@@ -237,9 +237,10 @@ router.post('/chapters/:id/suggestions', async (req, res) => {
     // Use current DB text or text passed in body
     const title = req.body.title !== undefined ? req.body.title : chapter.title;
     const text = req.body.text !== undefined ? req.body.text : chapter.text;
+    const customPrompt = req.body.customPrompt !== undefined ? req.body.customPrompt : null;
 
     // Generate suggestions
-    const suggestionsArray = await generateSuggestions(title, text);
+    const suggestionsArray = await generateSuggestions(title, text, customPrompt);
     const suggestionsJson = JSON.stringify(suggestionsArray);
 
     // Save to DB
@@ -257,6 +258,46 @@ router.post('/chapters/:id/suggestions', async (req, res) => {
   } catch (err) {
     console.error('Error generating suggestions:', err);
     res.status(500).json({ error: 'Failed to generate suggestions. Please try again.' });
+  }
+});
+
+// 10. POST /api/writer/upload-image - Upload base64 image and save to disk
+const fs = require('fs');
+const path = require('path');
+
+router.post('/upload-image', (req, res) => {
+  try {
+    const { imageBase64 } = req.body;
+    if (!imageBase64) {
+      return res.status(400).json({ error: 'No image data provided' });
+    }
+
+    const matches = imageBase64.match(/^data:image\/([a-zA-Z0-9]+);base64,(.+)$/);
+    let ext = 'png';
+    let base64Data = imageBase64;
+
+    if (matches) {
+      ext = matches[1] === 'jpeg' ? 'jpg' : matches[1];
+      base64Data = matches[2];
+    }
+
+    const uniqueName = `img_${uuidv4().slice(0, 8)}.${ext}`;
+    const uploadsDir = path.join(__dirname, '../..', 'uploads');
+
+    if (!fs.existsSync(uploadsDir)) {
+      fs.mkdirSync(uploadsDir, { recursive: true });
+    }
+
+    const filePath = path.join(uploadsDir, uniqueName);
+    fs.writeFileSync(filePath, Buffer.from(base64Data, 'base64'));
+
+    res.json({
+      success: true,
+      url: `/uploads/${uniqueName}`
+    });
+  } catch (err) {
+    console.error('Image upload error:', err);
+    res.status(500).json({ error: 'Failed to upload image' });
   }
 });
 

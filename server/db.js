@@ -2,11 +2,32 @@ const Database = require('better-sqlite3');
 const path = require('path');
 const { v4: uuidv4 } = require('uuid');
 
-const dbPath = path.join(__dirname, '..', 'data.sqlite');
+const fs = require('fs');
+
+let dbPath = path.join(__dirname, '..', 'data.sqlite');
+
+// On serverless environments (like Vercel), the root folder is read-only.
+// We copy data.sqlite to /tmp if running on Vercel.
+if (process.env.VERCEL) {
+  const tmpDbPath = path.join('/tmp', 'data.sqlite');
+  if (!fs.existsSync(tmpDbPath) && fs.existsSync(dbPath)) {
+    try {
+      fs.copyFileSync(dbPath, tmpDbPath);
+    } catch (err) {
+      console.error('Failed to copy SQLite to /tmp:', err);
+    }
+  }
+  dbPath = fs.existsSync(tmpDbPath) ? tmpDbPath : dbPath;
+}
+
 const db = new Database(dbPath);
 
 // Enable foreign keys and WAL mode for reliability and performance
-db.pragma('journal_mode = WAL');
+try {
+  db.pragma('journal_mode = WAL');
+} catch (e) {
+  // WAL mode might not be supported in /tmp or memory
+}
 db.pragma('foreign_keys = ON');
 
 // Initialize schema

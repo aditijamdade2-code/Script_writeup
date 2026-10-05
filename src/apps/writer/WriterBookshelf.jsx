@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { BookOpen, Plus, Eye, Trash2, Sparkles, Clock, FileText, Share2, Check } from 'lucide-react';
+import { BookOpen, Plus, Trash2, Sparkles, FileText, Share2, Check } from 'lucide-react';
 
-export default function WriterBookshelf({ onSelectBook, onOpenReader }) {
+export default function WriterBookshelf({ onSelectBook }) {
   const [books, setBooks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
@@ -10,8 +10,8 @@ export default function WriterBookshelf({ onSelectBook, onOpenReader }) {
 
   const handleCopyLink = (e, bookId) => {
     e.stopPropagation();
-    const readerUrl = `${window.location.origin}/read/${bookId}`;
-    navigator.clipboard.writeText(readerUrl);
+    const url = `${window.location.origin}/writer/book/${bookId}`;
+    navigator.clipboard.writeText(url);
     setCopiedBookId(bookId);
     setTimeout(() => setCopiedBookId(null), 3000);
   };
@@ -75,15 +75,6 @@ export default function WriterBookshelf({ onSelectBook, onOpenReader }) {
           <span>Scribe Studio</span>
           <span className="brand-badge">Writer App</span>
         </div>
-        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-          <button
-            className="reader-tool-btn"
-            style={{ color: 'var(--text-secondary)' }}
-            onClick={() => onOpenReader()}
-          >
-            <Eye size={16} /> Open Reader App
-          </button>
-        </div>
       </header>
 
       {/* Main Bookshelf */}
@@ -130,39 +121,25 @@ export default function WriterBookshelf({ onSelectBook, onOpenReader }) {
                     <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                       <FileText size={14} /> {book.page_count} {book.page_count === 1 ? 'page' : 'pages'}
                     </span>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      <Eye size={14} /> {book.published_page_count || 0} published
-                    </span>
                   </div>
                 </div>
 
-                <div className="book-card-actions">
-                  <button
-                    className="reader-tool-btn"
-                    style={{ fontSize: '0.78rem', flex: 1, justifyContent: 'center' }}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onOpenReader(book.id);
-                    }}
-                  >
-                    <Eye size={14} /> Read
-                  </button>
+                <div className="book-card-actions" style={{ justifyContent: 'space-between' }}>
                   <button
                     className="reader-tool-btn"
                     style={{
                       fontSize: '0.78rem',
-                      flex: 1,
-                      justify: 'center',
                       background: copiedBookId === book.id ? 'rgba(16, 185, 129, 0.15)' : undefined,
                       borderColor: copiedBookId === book.id ? 'var(--accent-emerald)' : undefined,
                       color: copiedBookId === book.id ? 'var(--accent-emerald)' : undefined
                     }}
                     onClick={(e) => handleCopyLink(e, book.id)}
-                    title="Copy shareable link for readers"
+                    title="Copy direct link to manuscript"
                   >
                     {copiedBookId === book.id ? <Check size={14} /> : <Share2 size={14} />}
-                    {copiedBookId === book.id ? 'Copied' : 'Share'}
+                    {copiedBookId === book.id ? 'Copied Link' : 'Share Link'}
                   </button>
+
                   <button
                     className="delete-chapter-btn"
                     title="Delete book"
@@ -179,3 +156,4 @@ export default function WriterBookshelf({ onSelectBook, onOpenReader }) {
     </div>
   );
 }
+
