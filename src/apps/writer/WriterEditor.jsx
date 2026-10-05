@@ -500,6 +500,17 @@ export default function WriterEditor({ bookId, onBackToBookshelf }) {
   // Current page images list
   const currentChapterImages = pageImagesMap[selectedChapterId] || [];
 
+  // Dynamic calculation: Push text down when images are added or moved down
+  const topImages = currentChapterImages.filter(img => img.position !== 'bottom');
+  let dynamicTextPushDown = 0;
+  topImages.forEach(img => {
+    const cardHeight = img.size === 'small' ? 180 : img.size === 'full' ? 360 : 260;
+    const bottomPos = (img.y || 0) + cardHeight;
+    if (bottomPos > dynamicTextPushDown) {
+      dynamicTextPushDown = bottomPos;
+    }
+  });
+
   // Copy Direct Link to Manuscript
   const [copiedLink, setCopiedLink] = useState(false);
   const handleCopyShareLink = () => {
@@ -772,6 +783,10 @@ export default function WriterEditor({ bookId, onBackToBookshelf }) {
 
             <textarea
               className="editor-textarea"
+              style={{
+                marginTop: dynamicTextPushDown > 0 ? `${Math.max(16, dynamicTextPushDown - 220)}px` : '0px',
+                transition: activeDragImgId ? 'none' : 'margin-top 0.2s cubic-bezier(0.16, 1, 0.3, 1)'
+              }}
               placeholder="Start writing your chapter here..."
               value={text}
               onChange={(e) => handleTextChange(e.target.value)}
