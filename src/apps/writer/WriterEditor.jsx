@@ -352,7 +352,7 @@ export default function WriterEditor({ bookId, onBackToBookshelf }) {
     }
   }, [text]);
 
-  // Add Image to Page Gallery (Default alignment: 'left' so text shifts right)
+  // Add Image to Page Gallery (Default alignment: 'center' full-width flow)
   const handleInsertImageMark = (url, caption) => {
     if (!url || !selectedChapterId) return;
     const cleanCap = caption ? caption.trim() : 'Illustration';
@@ -362,8 +362,8 @@ export default function WriterEditor({ bookId, onBackToBookshelf }) {
       id: `img_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
       caption: cleanCap,
       url: resolvedUrl,
-      position: 'top', // 'top' (above/with text) or 'bottom' (below text)
-      align: 'left', // 'left' (content shifts right) | 'center' | 'right' (content shifts left)
+      position: 'top', // 'top' or 'bottom'
+      align: 'center', // 'left' | 'center' | 'right'
       size: 'medium' // 'small' | 'medium' | 'full'
     };
 
@@ -392,8 +392,8 @@ export default function WriterEditor({ bookId, onBackToBookshelf }) {
       const updatedList = currentList.map(img => {
         if (img.id === imgId) {
           const updated = { ...img, [key]: value };
-          if (key === 'align' && value === 'center') {
-            updated.x = 0; // Reset horizontal drag offset when selecting Center
+          if (key === 'align') {
+            updated.x = 0; // Reset horizontal drag offset on explicit alignment change
           }
           if (key === 'position') {
             updated.y = 0; // Reset vertical drag offset on position toggle
@@ -440,23 +440,12 @@ export default function WriterEditor({ bookId, onBackToBookshelf }) {
     const newX = dragStartPosRef.current.initialX + dx;
     const newY = dragStartPosRef.current.initialY + dy;
 
-    // Detect horizontal drag direction: only switch away from center if dragged significantly left or right
-    let newAlign = img.align || 'center';
-    if (dx > 120) {
-      newAlign = 'right';
-    } else if (dx < -120) {
-      newAlign = 'left';
-    } else if (Math.abs(dx) < 60 && (img.align === 'center' || !img.align)) {
-      newAlign = 'center';
-    }
-
     setPageImagesMap(prev => {
       const currentList = prev[selectedChapterId] || [];
       const updatedList = currentList.map(item => item.id === img.id ? {
         ...item,
         x: newX,
-        y: newY,
-        align: newAlign
+        y: newY
       } : item);
       return { ...prev, [selectedChapterId]: updatedList };
     });
@@ -480,14 +469,14 @@ export default function WriterEditor({ bookId, onBackToBookshelf }) {
   const renderImageCard = (img) => (
     <div
       key={img.id}
-      className={`page-illustration-card size-${img.size || 'medium'} align-${img.align || 'left'} ${activeDragImgId === img.id ? 'is-dragging' : ''}`}
+      className={`page-illustration-card size-${img.size || 'medium'} ${activeDragImgId === img.id ? 'is-dragging' : ''}`}
       onPointerDown={(e) => handlePointerDown(e, img)}
       onPointerMove={(e) => handlePointerMove(e, img)}
       onPointerUp={(e) => handlePointerUp(e, img)}
       style={{
         touchAction: 'none',
         cursor: activeDragImgId === img.id ? 'grabbing' : 'grab',
-        transform: `translate3d(0px, ${img.y || 0}px, 0px)`,
+        transform: `translate3d(${img.x || 0}px, ${img.y || 0}px, 0px)`,
         transition: activeDragImgId === img.id ? 'none' : 'transform 0.15s ease'
       }}
     >
@@ -828,48 +817,32 @@ export default function WriterEditor({ bookId, onBackToBookshelf }) {
           </div>
 
           {/* Text Area Writing Surface & Flowing Illustrations */}
+          {/* Text Area Writing Surface & Full-Width Illustrations */}
           <div className="editor-body">
-            {/* Centered Top Page Illustrations */}
-            {currentChapterImages.filter(img => img.position !== 'bottom' && img.align === 'center').length > 0 && (
-              <div className="center-image-wrapper">
-                {currentChapterImages.filter(img => img.position !== 'bottom' && img.align === 'center').map(img => renderImageCard(img))}
+            {/* Top Page Illustrations */}
+            {currentChapterImages.filter(img => img.position !== 'bottom').map(img => (
+              <div key={img.id} className={`image-card-wrapper align-${img.align || 'center'}`}>
+                {renderImageCard(img)}
               </div>
-            )}
+            ))}
 
-            {/* Main Canvas Flow Container (Left Images, Text Area, Right Images) */}
-            <div className="editor-canvas-flow">
-              {/* Left-Aligned Images (Text Content Shifts Right) */}
-              {currentChapterImages.filter(img => img.position !== 'bottom' && (img.align === 'left' || !img.align)).length > 0 && (
-                <div className="flow-sidebar-images left-side">
-                  {currentChapterImages.filter(img => img.position !== 'bottom' && (img.align === 'left' || !img.align)).map(img => renderImageCard(img))}
-                </div>
-              )}
-
-              {/* Text Area Writing Surface */}
-              <textarea
-                className="editor-textarea"
-                placeholder="Start writing your chapter here..."
-                value={text}
-                onChange={(e) => handleTextChange(e.target.value)}
-                onKeyDown={handleKeyDown}
-                onDrop={(e) => e.preventDefault()}
-                onDragOver={(e) => e.preventDefault()}
-              />
-
-              {/* Right-Aligned Images (Text Content Shifts Left) */}
-              {currentChapterImages.filter(img => img.position !== 'bottom' && img.align === 'right').length > 0 && (
-                <div className="flow-sidebar-images right-side">
-                  {currentChapterImages.filter(img => img.position !== 'bottom' && img.align === 'right').map(img => renderImageCard(img))}
-                </div>
-              )}
-            </div>
+            {/* Full-Width Textarea Canvas */}
+            <textarea
+              className="editor-textarea"
+              placeholder="Start writing your chapter here..."
+              value={text}
+              onChange={(e) => handleTextChange(e.target.value)}
+              onKeyDown={handleKeyDown}
+              onDrop={(e) => e.preventDefault()}
+              onDragOver={(e) => e.preventDefault()}
+            />
 
             {/* Bottom Page Illustrations */}
-            {currentChapterImages.filter(img => img.position === 'bottom').length > 0 && (
-              <div className="center-image-wrapper bottom">
-                {currentChapterImages.filter(img => img.position === 'bottom').map(img => renderImageCard(img))}
+            {currentChapterImages.filter(img => img.position === 'bottom').map(img => (
+              <div key={img.id} className={`image-card-wrapper align-${img.align || 'center'} bottom`}>
+                {renderImageCard(img)}
               </div>
-            )}
+            ))}
 
             <div className="editor-footer-stats">
               <span>{wordCount} words &bull; {charCount} characters</span>

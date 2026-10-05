@@ -769,42 +769,27 @@
   background: rgba(99, 102, 241, 0.05);
 }
 
-/* Canvas Flow Layout for Side-by-Side Images & Textarea */
-.editor-canvas-flow {
-  display: flex;
-  flex-direction: row;
-  align-items: flex-start;
-  justify-content: center;
-  gap: 24px;
-  width: 100%;
-  max-width: 1160px;
-  margin: 12px 0;
-}
-
-.flow-sidebar-images {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  flex-shrink: 0;
-}
-
-.flow-sidebar-images.left-side {
-  align-items: flex-end;
-}
-
-.flow-sidebar-images.right-side {
-  align-items: flex-start;
-}
-
-.center-image-wrapper {
+/* Full Width Canvas Layout for Text & Images */
+.image-card-wrapper {
   width: 100%;
   max-width: 760px;
   display: flex;
-  justify-content: center;
-  margin: 16px 0;
+  margin: 14px 0;
 }
 
-.center-image-wrapper.bottom {
+.image-card-wrapper.align-left {
+  justify-content: flex-start;
+}
+
+.image-card-wrapper.align-center {
+  justify-content: center;
+}
+
+.image-card-wrapper.align-right {
+  justify-content: flex-end;
+}
+
+.image-card-wrapper.bottom {
   margin-top: 24px;
 }
 
