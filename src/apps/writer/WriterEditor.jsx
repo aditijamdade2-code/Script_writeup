@@ -362,7 +362,7 @@ export default function WriterEditor({ bookId, onBackToBookshelf }) {
       id: `img_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
       caption: cleanCap,
       url: resolvedUrl,
-      position: 'top', // 'top' or 'bottom'
+      position: 'middle', // 'top' | 'middle' (between text paragraphs) | 'bottom'
       align: 'center', // 'left' | 'center' | 'right'
       size: 'medium' // 'small' | 'medium' | 'full'
     };
@@ -514,17 +514,24 @@ export default function WriterEditor({ bookId, onBackToBookshelf }) {
           <AlignRight size={13} />
         </button>
 
-        {/* Position Toggles */}
+        {/* Position Toggles: Top, Middle (Between Text), Bottom */}
         <button
-          className={`img-control-btn ${img.position !== 'bottom' ? 'active' : ''}`}
-          title="Position: Top"
+          className={`img-control-btn ${img.position === 'top' ? 'active' : ''}`}
+          title="Position: Top (Above text)"
           onClick={() => handleUpdateImageProp(img.id, 'position', 'top')}
         >
           <ArrowUp size={13} />
         </button>
         <button
+          className={`img-control-btn ${img.position === 'middle' || (!img.position && img.position !== 'top' && img.position !== 'bottom') ? 'active' : ''}`}
+          title="Position: Middle (In the middle of text)"
+          onClick={() => handleUpdateImageProp(img.id, 'position', 'middle')}
+        >
+          <span style={{ fontSize: '10px', fontWeight: 700, padding: '0 2px' }}>MID</span>
+        </button>
+        <button
           className={`img-control-btn ${img.position === 'bottom' ? 'active' : ''}`}
-          title="Position: Bottom"
+          title="Position: Bottom (Below text)"
           onClick={() => handleUpdateImageProp(img.id, 'position', 'bottom')}
         >
           <ArrowDown size={13} />
@@ -615,8 +622,17 @@ export default function WriterEditor({ bookId, onBackToBookshelf }) {
     }
   };
 
-  // Current page images list
+  // Current page images list & position grouping
   const currentChapterImages = pageImagesMap[selectedChapterId] || [];
+  const topImages = currentChapterImages.filter(img => img.position === 'top');
+  const middleImages = currentChapterImages.filter(img => img.position === 'middle' || (!img.position && img.position !== 'top' && img.position !== 'bottom'));
+  const bottomImages = currentChapterImages.filter(img => img.position === 'bottom');
+
+  // Paragraph splitting for Middle image placement
+  const paragraphs = text ? text.split(/\n\s*\n/) : [''];
+  const midIndex = Math.max(1, Math.ceil(paragraphs.length / 2));
+  const topParagraphs = paragraphs.slice(0, midIndex).join('\n\n');
+  const bottomParagraphs = paragraphs.slice(midIndex).join('\n\n');
 
   // Copy Direct Link to Manuscript
   const [copiedLink, setCopiedLink] = useState(false);
@@ -816,29 +832,64 @@ export default function WriterEditor({ bookId, onBackToBookshelf }) {
             </div>
           </div>
 
-          {/* Text Area Writing Surface & Flowing Illustrations */}
-          {/* Text Area Writing Surface & Full-Width Illustrations */}
+          {/* Text Area Writing Surface & Middle Image Flow */}
           <div className="editor-body">
             {/* Top Page Illustrations */}
-            {currentChapterImages.filter(img => img.position !== 'bottom').map(img => (
+            {topImages.map(img => (
               <div key={img.id} className={`image-card-wrapper align-${img.align || 'center'}`}>
                 {renderImageCard(img)}
               </div>
             ))}
 
-            {/* Full-Width Textarea Canvas */}
-            <textarea
-              className="editor-textarea"
-              placeholder="Start writing your chapter here..."
-              value={text}
-              onChange={(e) => handleTextChange(e.target.value)}
-              onKeyDown={handleKeyDown}
-              onDrop={(e) => e.preventDefault()}
-              onDragOver={(e) => e.preventDefault()}
-            />
+            {middleImages.length > 0 ? (
+              <div style={{ width: '100%', maxWidth: '760px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                <textarea
+                  className="editor-textarea"
+                  style={{ minHeight: '220px' }}
+                  placeholder="Start writing your chapter here..."
+                  value={topParagraphs}
+                  onChange={(e) => {
+                    const newTop = e.target.value;
+                    const newFullText = bottomParagraphs ? `${newTop}\n\n${bottomParagraphs}` : newTop;
+                    handleTextChange(newFullText);
+                  }}
+                  onKeyDown={handleKeyDown}
+                />
+
+                {/* MIDDLE IMAGES (Placed in the Middle of Text!) */}
+                {middleImages.map(img => (
+                  <div key={img.id} className={`image-card-wrapper align-${img.align || 'center'} middle`}>
+                    {renderImageCard(img)}
+                  </div>
+                ))}
+
+                <textarea
+                  className="editor-textarea"
+                  style={{ minHeight: '220px' }}
+                  placeholder="Continue writing here..."
+                  value={bottomParagraphs}
+                  onChange={(e) => {
+                    const newBottom = e.target.value;
+                    const newFullText = topParagraphs ? `${topParagraphs}\n\n${newBottom}` : newBottom;
+                    handleTextChange(newFullText);
+                  }}
+                  onKeyDown={handleKeyDown}
+                />
+              </div>
+            ) : (
+              <textarea
+                className="editor-textarea"
+                placeholder="Start writing your chapter here..."
+                value={text}
+                onChange={(e) => handleTextChange(e.target.value)}
+                onKeyDown={handleKeyDown}
+                onDrop={(e) => e.preventDefault()}
+                onDragOver={(e) => e.preventDefault()}
+              />
+            )}
 
             {/* Bottom Page Illustrations */}
-            {currentChapterImages.filter(img => img.position === 'bottom').map(img => (
+            {bottomImages.map(img => (
               <div key={img.id} className={`image-card-wrapper align-${img.align || 'center'} bottom`}>
                 {renderImageCard(img)}
               </div>
