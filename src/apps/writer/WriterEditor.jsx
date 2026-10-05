@@ -341,58 +341,151 @@ export default function WriterEditor({ bookId, onBackToBookshelf }) {
     return url;
   };
 
-  // Cursor position state for exact image insertion
-  const textareaRef = useRef(null);
-  const [savedCursorPos, setSavedCursorPos] = useState(0);
+  // Target insertion index for adding images at specific block gaps
+  const [targetInsertBlockIndex, setTargetInsertBlockIndex] = useState(null);
+  const [activeDragBlockIndex, setActiveDragBlockIndex] = useState(null);
+  const [dropTargetBlockIndex, setDropTargetBlockIndex] = useState(null);
 
-  const updateCursorPos = () => {
-    if (textareaRef.current) {
-      setSavedCursorPos(textareaRef.current.selectionStart || 0);
+  // Helper: parse text into block elements
+  const parseBlocks = (textStr) => {
+    if (!textStr) return [{ id: 'b_0', type: 'text', content: '' }];
+
+    const regex = /!\[([^\]]*)\]\(([^)]+)\)/g;
+    const blocks = [];
+    let lastIndex = 0;
+    let match;
+    let count = 0;
+
+    while ((match = regex.exec(textStr)) !== null) {
+      if (match.index > lastIndex) {
+        const prose = textStr.slice(lastIndex, match.index);
+        if (prose.trim()) {
+          blocks.push({ id: `b_${count++}`, type: 'text', content: prose.trim() });
+        }
+      }
+
+      const alt = match[1] || 'Illustration';
+      const url = match[2];
+      const parts = alt.split('|');
+      const caption = parts[0] || 'Illustration';
+      const size = parts[1] || 'medium';
+      const align = parts[2] || 'center';
+
+      blocks.push({
+        id: `b_${count++}`,
+        type: 'image',
+        rawTag: match[0],
+        caption,
+        size,
+        align,
+        url
+      });
+
+      lastIndex = regex.lastIndex;
     }
+
+    if (lastIndex < textStr.length) {
+      const remaining = textStr.slice(lastIndex);
+      if (remaining.trim()) {
+        blocks.push({ id: `b_${count++}`, type: 'text', content: remaining.trim() });
+      }
+    }
+
+    if (blocks.length === 0) {
+      blocks.push({ id: 'b_0', type: 'text', content: textStr });
+    }
+
+    return blocks;
   };
 
-  // Add Image at Exact Cursor Position in Story Text
+  // Helper: serialize blocks back to single text string
+  const serializeBlocks = (blocks) => {
+    return blocks.map(b => {
+      if (b.type === 'text') return b.content;
+      return `![${b.caption || 'Illustration'}|${b.size || 'medium'}|${b.align || 'center'}](${b.url})`;
+    }).join('\n\n');
+  };
+
+  // Add Image at Target Block Gap
   const handleInsertImageMark = (url, caption) => {
     if (!url || !selectedChapterId) return;
     const cleanCap = caption ? caption.trim() : 'Illustration';
     const resolvedUrl = resolveImgUrl(url);
 
-    // Format markdown tag: ![Caption|size|align](url)
-    const imageTag = `\n\n![${cleanCap}|medium|center](${resolvedUrl})\n\n`;
+    const blocks = parseBlocks(text);
+    const insertIdx = targetInsertBlockIndex !== null ? targetInsertBlockIndex : blocks.length;
 
-    const pos = (savedCursorPos !== null && savedCursorPos !== undefined) ? savedCursorPos : text.length;
-    const before = text.slice(0, pos);
-    const after = text.slice(pos);
+    const newImgBlock = {
+      id: `img_${Date.now()}`,
+      type: 'image',
+      caption: cleanCap,
+      size: 'medium',
+      align: 'center',
+      url: resolvedUrl
+    };
 
-    const updatedText = before + imageTag + after;
-    handleTextChange(updatedText);
+    blocks.splice(insertIdx, 0, newImgBlock);
+    handleTextChange(serializeBlocks(blocks));
 
-    // Reset Modal
     setShowImageModal(false);
     setImageUrlInput('');
     setImageCaptionInput('');
+    setTargetInsertBlockIndex(null);
   };
 
-  // Update Image Properties (Size, Align, Caption) inside Markdown Tag
-  const handleUpdateMarkdownImage = (rawTag, newSize, newAlign, newCaption) => {
-    const match = rawTag.match(/^!\[([^\]]*)\]\(([^)]+)\)$/);
-    if (!match) return;
-
-    const url = match[2];
-    const parts = match[1].split('|');
-    const cap = newCaption !== undefined ? newCaption : (parts[0] || 'Illustration');
-    const size = newSize !== undefined ? newSize : (parts[1] || 'medium');
-    const align = newAlign !== undefined ? newAlign : (parts[2] || 'center');
-
-    const newTag = `![${cap}|${size}|${align}](${url})`;
-    const updatedText = text.replace(rawTag, newTag);
-    handleTextChange(updatedText);
+  // Drag Pointer Handlers for Image Blocks
+  const handleBlockDragStart = (e, bIndex) => {
+    e.stopPropagation();
+    e.preventDefault();
+    setActiveDragBlockIndex(bIndex);
+    e.currentTarget.setPointerCapture(e.pointerId);
   };
 
-  // Remove Image from Story Text
-  const handleDeleteMarkdownImage = (rawTag) => {
-    const updatedText = text.replace(rawTag, '').replace(/\n\n\n+/g, '\n\n').trim();
-    handleTextChange(updatedText);
+  const handleBlockDragMove = (e) => {
+    if (activeDragBlockIndex === null) return;
+    e.stopPropagation();
+    e.preventDefault();
+
+    const elements = document.querySelectorAll('[data-block-gap]');
+    if (!elements || elements.length === 0) return;
+
+    let closestGapIdx = 0;
+    let minDistance = Infinity;
+
+    elements.forEach((el) => {
+      const rect = el.getBoundingClientRect();
+      const gapIdx = parseInt(el.getAttribute('data-block-gap'), 10);
+      const midY = rect.top + rect.height / 2;
+      const distance = Math.abs(e.clientY - midY);
+
+      if (distance < minDistance) {
+        minDistance = distance;
+        closestGapIdx = gapIdx;
+      }
+    });
+
+    setDropTargetBlockIndex(closestGapIdx);
+  };
+
+  const handleBlockDragEnd = (e) => {
+    if (activeDragBlockIndex === null) return;
+    e.stopPropagation();
+    e.preventDefault();
+
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    } catch (err) {}
+
+    if (dropTargetBlockIndex !== null && dropTargetBlockIndex !== activeDragBlockIndex) {
+      const blocks = parseBlocks(text);
+      const [movedBlock] = blocks.splice(activeDragBlockIndex, 1);
+      const insertAt = dropTargetBlockIndex > activeDragBlockIndex ? dropTargetBlockIndex - 1 : dropTargetBlockIndex;
+      blocks.splice(insertAt, 0, movedBlock);
+      handleTextChange(serializeBlocks(blocks));
+    }
+
+    setActiveDragBlockIndex(null);
+    setDropTargetBlockIndex(null);
   };
 
   // Remove Image from Page Gallery
@@ -650,129 +743,153 @@ export default function WriterEditor({ bookId, onBackToBookshelf }) {
 
           {/* Text Area Writing Surface */}
           <div className="editor-body">
-            <div style={{ width: '100%', maxWidth: '760px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+            <div className="direct-manuscript-paper" style={{ width: '100%', maxWidth: '760px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
 
-              {/* Single Spacious Story Textarea */}
-              <div style={{ position: 'relative', width: '100%' }}>
-                <textarea
-                  ref={textareaRef}
-                  className="editor-textarea"
-                  placeholder="Start writing your chapter here... Place your cursor anywhere in your text and click 'Add Image' to insert an illustration right there!"
-                  value={text}
-                  onChange={(e) => {
-                    handleTextChange(e.target.value);
-                    updateCursorPos();
-                  }}
-                  onSelect={updateCursorPos}
-                  onClick={updateCursorPos}
-                  onKeyUp={updateCursorPos}
-                  onKeyDown={handleKeyDown}
-                  onDrop={(e) => e.preventDefault()}
-                  onDragOver={(e) => e.preventDefault()}
-                  style={{ minHeight: '380px', width: '100%' }}
-                />
-              </div>
+              {(() => {
+                const blocks = parseBlocks(text);
 
-              {/* Formatted Book Manuscript Flow with Inline Image Cards */}
-              {text && text.includes('![') && (
-                <div className="manuscript-preview-container" style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: '24px', width: '100%' }}>
-                  <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '16px' }}>
-                    📖 Manuscript Flow & Image Placement
-                  </div>
+                const handleUpdateBlockText = (bIndex, newContent) => {
+                  const updated = [...blocks];
+                  updated[bIndex].content = newContent;
+                  handleTextChange(serializeBlocks(updated));
+                };
 
-                  {(() => {
-                    const regex = /!\[([^\]]*)\]\(([^)]+)\)/g;
-                    const blocks = [];
-                    let lastIndex = 0;
-                    let match;
+                const handleUpdateBlockProp = (bIndex, key, value) => {
+                  const updated = [...blocks];
+                  updated[bIndex][key] = value;
+                  handleTextChange(serializeBlocks(updated));
+                };
 
-                    while ((match = regex.exec(text)) !== null) {
-                      if (match.index > lastIndex) {
-                        const prose = text.slice(lastIndex, match.index);
-                        if (prose.trim()) blocks.push({ type: 'text', content: prose });
-                      }
+                const handleDeleteBlock = (bIndex) => {
+                  const updated = [...blocks];
+                  updated.splice(bIndex, 1);
+                  handleTextChange(serializeBlocks(updated));
+                };
 
-                      const alt = match[1] || 'Illustration';
-                      const url = match[2];
-                      const parts = alt.split('|');
-                      const caption = parts[0] || 'Illustration';
-                      const size = parts[1] || 'medium';
-                      const align = parts[2] || 'center';
+                return (
+                  <div style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                    
+                    {/* Insertion Gap 0 (Before first block) */}
+                    <div
+                      data-block-gap={0}
+                      className={`manuscript-gap-bar ${dropTargetBlockIndex === 0 ? 'drop-active' : ''}`}
+                      onClick={() => {
+                        setTargetInsertBlockIndex(0);
+                        setShowImageModal(true);
+                      }}
+                    >
+                      <span className="gap-insert-chip"><Plus size={13} /> Insert Image Here</span>
+                    </div>
 
-                      blocks.push({
-                        type: 'image',
-                        rawTag: match[0],
-                        caption,
-                        size,
-                        align,
-                        url
-                      });
+                    {blocks.map((block, bIdx) => {
+                      const gapIdxAfter = bIdx + 1;
+                      const isDropActive = dropTargetBlockIndex === gapIdxAfter;
 
-                      lastIndex = regex.lastIndex;
-                    }
-
-                    if (lastIndex < text.length) {
-                      const remaining = text.slice(lastIndex);
-                      if (remaining.trim()) blocks.push({ type: 'text', content: remaining });
-                    }
-
-                    return blocks.map((block, bIdx) => {
                       if (block.type === 'text') {
                         return (
-                          <div key={bIdx} style={{ fontFamily: 'var(--font-serif)', fontSize: '1.1rem', lineHeight: '1.8', color: '#e2e8f0', whiteSpace: 'pre-wrap', marginBottom: '16px' }}>
-                            {block.content.trim()}
-                          </div>
+                          <React.Fragment key={block.id || bIdx}>
+                            <div style={{ width: '100%', position: 'relative' }}>
+                              <textarea
+                                className="inline-manuscript-textarea"
+                                placeholder="Start writing story paragraphs here..."
+                                value={block.content}
+                                onChange={(e) => handleUpdateBlockText(bIdx, e.target.value)}
+                                onKeyDown={handleKeyDown}
+                                onDrop={(e) => e.preventDefault()}
+                                onDragOver={(e) => e.preventDefault()}
+                                style={{ minHeight: '90px' }}
+                              />
+                            </div>
+
+                            {/* Insertion Gap Bar After Block */}
+                            <div
+                              data-block-gap={gapIdxAfter}
+                              className={`manuscript-gap-bar ${isDropActive ? 'drop-active' : ''}`}
+                              onClick={() => {
+                                setTargetInsertBlockIndex(gapIdxAfter);
+                                setShowImageModal(true);
+                              }}
+                            >
+                              <span className="gap-insert-chip"><Plus size={13} /> Insert Image Here</span>
+                            </div>
+                          </React.Fragment>
                         );
                       }
 
+                      // Image Block Rendering
+                      const isDraggingThis = activeDragBlockIndex === bIdx;
+
                       return (
-                        <div
-                          key={bIdx}
-                          className={`page-illustration-card size-${block.size}`}
-                          style={{
-                            margin: block.align === 'center' ? '20px auto' : block.align === 'left' ? '20px auto 20px 0' : '20px 0 20px auto',
-                            maxWidth: block.size === 'small' ? '240px' : block.size === 'medium' ? '400px' : '100%'
-                          }}
-                        >
-                          {/* Controls Overlay */}
-                          <div className="illustration-controls-overlay">
-                            <button
-                              className="img-control-badge-btn"
-                              title="Click to toggle size: Small ➔ Medium ➔ Full"
-                              onClick={() => {
-                                const nextSize = block.size === 'small' ? 'medium' : block.size === 'medium' ? 'full' : 'small';
-                                handleUpdateMarkdownImage(block.rawTag, nextSize, block.align, block.caption);
-                              }}
-                            >
-                              SIZE: {block.size.toUpperCase()}
-                            </button>
-                            <button
-                              className="img-control-badge-btn"
-                              title="Click to toggle alignment: Left ➔ Center ➔ Right"
-                              onClick={() => {
-                                const nextAlign = block.align === 'center' ? 'left' : block.align === 'left' ? 'right' : 'center';
-                                handleUpdateMarkdownImage(block.rawTag, block.size, nextAlign, block.caption);
-                              }}
-                            >
-                              ALIGN: {block.align.toUpperCase()}
-                            </button>
-                            <button
-                              className="img-control-btn"
-                              title="Remove image from manuscript"
-                              onClick={() => handleDeleteMarkdownImage(block.rawTag)}
-                            >
-                              <Trash2 size={13} />
-                            </button>
+                        <React.Fragment key={block.id || bIdx}>
+                          <div
+                            className={`page-illustration-card size-${block.size || 'medium'} ${isDraggingThis ? 'is-dragging' : ''}`}
+                            style={{
+                              margin: block.align === 'center' ? '20px auto' : block.align === 'left' ? '20px auto 20px 0' : '20px 0 20px auto',
+                              maxWidth: block.size === 'small' ? '260px' : block.size === 'medium' ? '450px' : '100%'
+                            }}
+                          >
+                            {/* Controls Overlay */}
+                            <div className="illustration-controls-overlay">
+                              <button
+                                className="img-control-btn drag-handle"
+                                style={{ cursor: 'grab' }}
+                                title="Hold & Drag to place image anywhere in text"
+                                onPointerDown={(e) => handleBlockDragStart(e, bIdx)}
+                                onPointerMove={handleBlockDragMove}
+                                onPointerUp={handleBlockDragEnd}
+                              >
+                                <GripVertical size={14} />
+                              </button>
+                              <button
+                                className="img-control-badge-btn"
+                                title="Click to toggle size: Small ➔ Medium ➔ Full"
+                                onClick={() => {
+                                  const nextSize = block.size === 'small' ? 'medium' : block.size === 'medium' ? 'full' : 'small';
+                                  handleUpdateBlockProp(bIdx, 'size', nextSize);
+                                }}
+                              >
+                                SIZE: {(block.size || 'medium').toUpperCase()}
+                              </button>
+                              <button
+                                className="img-control-badge-btn"
+                                title="Click to toggle alignment: Left ➔ Center ➔ Right"
+                                onClick={() => {
+                                  const nextAlign = block.align === 'center' ? 'left' : block.align === 'left' ? 'right' : 'center';
+                                  handleUpdateBlockProp(bIdx, 'align', nextAlign);
+                                }}
+                              >
+                                ALIGN: {(block.align || 'center').toUpperCase()}
+                              </button>
+                              <button
+                                className="img-control-btn"
+                                title="Remove image from manuscript"
+                                onClick={() => handleDeleteBlock(bIdx)}
+                              >
+                                <Trash2 size={13} />
+                              </button>
+                            </div>
+
+                            <img src={block.url} alt={block.caption} className="illustration-img" />
+                            <div className="illustration-caption">{block.caption || 'Illustration'}</div>
                           </div>
 
-                          <img src={block.url} alt={block.caption} className="illustration-img" />
-                          <div className="illustration-caption">{block.caption || 'Illustration'}</div>
-                        </div>
+                          {/* Insertion Gap Bar After Image */}
+                          <div
+                            data-block-gap={gapIdxAfter}
+                            className={`manuscript-gap-bar ${isDropActive ? 'drop-active' : ''}`}
+                            onClick={() => {
+                              setTargetInsertBlockIndex(gapIdxAfter);
+                              setShowImageModal(true);
+                            }}
+                          >
+                            <span className="gap-insert-chip"><Plus size={13} /> Insert Image Here</span>
+                          </div>
+                        </React.Fragment>
                       );
-                    });
-                  })()}
-                </div>
-              )}
+                    })}
+                  </div>
+                );
+              })()}
             </div>
 
             <div className="editor-footer-stats">
