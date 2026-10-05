@@ -389,7 +389,16 @@ export default function WriterEditor({ bookId, onBackToBookshelf }) {
     if (!selectedChapterId) return;
     setPageImagesMap(prev => {
       const currentList = prev[selectedChapterId] || [];
-      const updatedList = currentList.map(img => img.id === imgId ? { ...img, [key]: value } : img);
+      const updatedList = currentList.map(img => {
+        if (img.id === imgId) {
+          const updated = { ...img, [key]: value };
+          if (key === 'position') {
+            updated.y = 0; // Reset vertical drag offset on explicit position toggle (top / bottom)
+          }
+          return updated;
+        }
+        return img;
+      });
       try {
         localStorage.setItem(`page_imgs_${selectedChapterId}`, JSON.stringify(updatedList));
       } catch (e) {
@@ -436,9 +445,23 @@ export default function WriterEditor({ bookId, onBackToBookshelf }) {
       newAlign = 'left';
     }
 
+    // Detect vertical drag distance to dynamically switch between Top & Bottom sections if dragged far down/up
+    let newPosition = img.position || 'top';
+    if (dy > 180 && img.position !== 'bottom') {
+      newPosition = 'bottom';
+    } else if (dy < -180 && img.position === 'bottom') {
+      newPosition = 'top';
+    }
+
     setPageImagesMap(prev => {
       const currentList = prev[selectedChapterId] || [];
-      const updatedList = currentList.map(item => item.id === img.id ? { ...item, x: newX, y: newY, align: newAlign } : item);
+      const updatedList = currentList.map(item => item.id === img.id ? {
+        ...item,
+        x: newX,
+        y: newY,
+        align: newAlign,
+        position: newPosition
+      } : item);
       return { ...prev, [selectedChapterId]: updatedList };
     });
   };
@@ -467,7 +490,9 @@ export default function WriterEditor({ bookId, onBackToBookshelf }) {
       onPointerUp={(e) => handlePointerUp(e, img)}
       style={{
         touchAction: 'none',
-        cursor: activeDragImgId === img.id ? 'grabbing' : 'grab'
+        cursor: activeDragImgId === img.id ? 'grabbing' : 'grab',
+        transform: `translate3d(0px, ${img.y || 0}px, 0px)`,
+        transition: activeDragImgId === img.id ? 'none' : 'transform 0.15s ease'
       }}
     >
       {/* Controls Overlay */}
