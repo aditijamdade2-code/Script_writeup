@@ -362,7 +362,7 @@ export default function WriterEditor({ bookId, onBackToBookshelf }) {
       id: `img_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
       caption: cleanCap,
       url: resolvedUrl,
-      position: 'middle', // 'top' | 'middle' (between text paragraphs) | 'bottom'
+      position: 'top', // 'top' or 'bottom'
       align: 'center', // 'left' | 'center' | 'right'
       size: 'medium' // 'small' | 'medium' | 'full'
     };
@@ -391,14 +391,8 @@ export default function WriterEditor({ bookId, onBackToBookshelf }) {
       const currentList = prev[selectedChapterId] || [];
       const updatedList = currentList.map(img => {
         if (img.id === imgId) {
-          const updated = { ...img, [key]: value };
-          if (key === 'align') {
-            updated.x = 0; // Reset horizontal drag offset on explicit alignment change
-          }
-          if (key === 'position') {
-            updated.y = 0; // Reset vertical drag offset on position toggle
-          }
-          return updated;
+          // Reset x/y transform offsets so image snaps cleanly in layout flow without covering text
+          return { ...img, [key]: value, x: 0, y: 0 };
         }
         return img;
       });
@@ -440,12 +434,21 @@ export default function WriterEditor({ bookId, onBackToBookshelf }) {
     const newX = dragStartPosRef.current.initialX + dx;
     const newY = dragStartPosRef.current.initialY + dy;
 
+    // Detect vertical drag direction: switch flow position so text moves to top/bottom cleanly
+    let newPos = img.position || 'top';
+    if (dy > 60 && img.position !== 'bottom') {
+      newPos = 'bottom';
+    } else if (dy < -60 && img.position === 'bottom') {
+      newPos = 'top';
+    }
+
     setPageImagesMap(prev => {
       const currentList = prev[selectedChapterId] || [];
       const updatedList = currentList.map(item => item.id === img.id ? {
         ...item,
         x: newX,
-        y: newY
+        y: newY,
+        position: newPos
       } : item);
       return { ...prev, [selectedChapterId]: updatedList };
     });
@@ -459,10 +462,19 @@ export default function WriterEditor({ bookId, onBackToBookshelf }) {
       e.currentTarget.releasePointerCapture(e.pointerId);
     } catch (err) {}
 
-    const currentList = pageImagesMap[selectedChapterId] || [];
-    try {
-      localStorage.setItem(`page_imgs_${selectedChapterId}`, JSON.stringify(currentList));
-    } catch (err) {}
+    // On drag release, snap cleanly into layout flow (x:0, y:0) so image never covers text
+    setPageImagesMap(prev => {
+      const currentList = prev[selectedChapterId] || [];
+      const updatedList = currentList.map(item => item.id === img.id ? {
+        ...item,
+        x: 0,
+        y: 0
+      } : item);
+      try {
+        localStorage.setItem(`page_imgs_${selectedChapterId}`, JSON.stringify(updatedList));
+      } catch (err) {}
+      return { ...prev, [selectedChapterId]: updatedList };
+    });
   };
 
   // Reusable Image Card Renderer with Full Card Dragging & Toolbar Alignment
@@ -476,8 +488,8 @@ export default function WriterEditor({ bookId, onBackToBookshelf }) {
       style={{
         touchAction: 'none',
         cursor: activeDragImgId === img.id ? 'grabbing' : 'grab',
-        transform: `translate3d(${img.x || 0}px, ${img.y || 0}px, 0px)`,
-        transition: activeDragImgId === img.id ? 'none' : 'transform 0.15s ease'
+        transform: activeDragImgId === img.id ? `translate3d(${img.x || 0}px, ${img.y || 0}px, 0px)` : 'none',
+        transition: activeDragImgId === img.id ? 'none' : 'all 0.2s ease'
       }}
     >
       {/* Controls Overlay */}
@@ -514,24 +526,17 @@ export default function WriterEditor({ bookId, onBackToBookshelf }) {
           <AlignRight size={13} />
         </button>
 
-        {/* Position Toggles: Top, Middle (Between Text), Bottom */}
+        {/* Position Toggles */}
         <button
-          className={`img-control-btn ${img.position === 'top' ? 'active' : ''}`}
-          title="Position: Top (Above text)"
+          className={`img-control-btn ${img.position !== 'bottom' ? 'active' : ''}`}
+          title="Position: Top"
           onClick={() => handleUpdateImageProp(img.id, 'position', 'top')}
         >
           <ArrowUp size={13} />
         </button>
         <button
-          className={`img-control-btn ${img.position === 'middle' || (!img.position && img.position !== 'top' && img.position !== 'bottom') ? 'active' : ''}`}
-          title="Position: Middle (In the middle of text)"
-          onClick={() => handleUpdateImageProp(img.id, 'position', 'middle')}
-        >
-          <span style={{ fontSize: '10px', fontWeight: 700, padding: '0 2px' }}>MID</span>
-        </button>
-        <button
           className={`img-control-btn ${img.position === 'bottom' ? 'active' : ''}`}
-          title="Position: Bottom (Below text)"
+          title="Position: Bottom"
           onClick={() => handleUpdateImageProp(img.id, 'position', 'bottom')}
         >
           <ArrowDown size={13} />
@@ -622,17 +627,8 @@ export default function WriterEditor({ bookId, onBackToBookshelf }) {
     }
   };
 
-  // Current page images list & position grouping
+  // Current page images list
   const currentChapterImages = pageImagesMap[selectedChapterId] || [];
-  const topImages = currentChapterImages.filter(img => img.position === 'top');
-  const middleImages = currentChapterImages.filter(img => img.position === 'middle' || (!img.position && img.position !== 'top' && img.position !== 'bottom'));
-  const bottomImages = currentChapterImages.filter(img => img.position === 'bottom');
-
-  // Paragraph splitting for Middle image placement
-  const paragraphs = text ? text.split(/\n\s*\n/) : [''];
-  const midIndex = Math.max(1, Math.ceil(paragraphs.length / 2));
-  const topParagraphs = paragraphs.slice(0, midIndex).join('\n\n');
-  const bottomParagraphs = paragraphs.slice(midIndex).join('\n\n');
 
   // Copy Direct Link to Manuscript
   const [copiedLink, setCopiedLink] = useState(false);
@@ -832,64 +828,29 @@ export default function WriterEditor({ bookId, onBackToBookshelf }) {
             </div>
           </div>
 
-          {/* Text Area Writing Surface & Middle Image Flow */}
+          {/* Text Area Writing Surface & Flowing Illustrations */}
+          {/* Text Area Writing Surface & Full-Width Illustrations */}
           <div className="editor-body">
             {/* Top Page Illustrations */}
-            {topImages.map(img => (
+            {currentChapterImages.filter(img => img.position !== 'bottom').map(img => (
               <div key={img.id} className={`image-card-wrapper align-${img.align || 'center'}`}>
                 {renderImageCard(img)}
               </div>
             ))}
 
-            {middleImages.length > 0 ? (
-              <div style={{ width: '100%', maxWidth: '760px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                <textarea
-                  className="editor-textarea"
-                  style={{ minHeight: '220px' }}
-                  placeholder="Start writing your chapter here..."
-                  value={topParagraphs}
-                  onChange={(e) => {
-                    const newTop = e.target.value;
-                    const newFullText = bottomParagraphs ? `${newTop}\n\n${bottomParagraphs}` : newTop;
-                    handleTextChange(newFullText);
-                  }}
-                  onKeyDown={handleKeyDown}
-                />
-
-                {/* MIDDLE IMAGES (Placed in the Middle of Text!) */}
-                {middleImages.map(img => (
-                  <div key={img.id} className={`image-card-wrapper align-${img.align || 'center'} middle`}>
-                    {renderImageCard(img)}
-                  </div>
-                ))}
-
-                <textarea
-                  className="editor-textarea"
-                  style={{ minHeight: '220px' }}
-                  placeholder="Continue writing here..."
-                  value={bottomParagraphs}
-                  onChange={(e) => {
-                    const newBottom = e.target.value;
-                    const newFullText = topParagraphs ? `${topParagraphs}\n\n${newBottom}` : newBottom;
-                    handleTextChange(newFullText);
-                  }}
-                  onKeyDown={handleKeyDown}
-                />
-              </div>
-            ) : (
-              <textarea
-                className="editor-textarea"
-                placeholder="Start writing your chapter here..."
-                value={text}
-                onChange={(e) => handleTextChange(e.target.value)}
-                onKeyDown={handleKeyDown}
-                onDrop={(e) => e.preventDefault()}
-                onDragOver={(e) => e.preventDefault()}
-              />
-            )}
+            {/* Full-Width Textarea Canvas */}
+            <textarea
+              className="editor-textarea"
+              placeholder="Start writing your chapter here..."
+              value={text}
+              onChange={(e) => handleTextChange(e.target.value)}
+              onKeyDown={handleKeyDown}
+              onDrop={(e) => e.preventDefault()}
+              onDragOver={(e) => e.preventDefault()}
+            />
 
             {/* Bottom Page Illustrations */}
-            {bottomImages.map(img => (
+            {currentChapterImages.filter(img => img.position === 'bottom').map(img => (
               <div key={img.id} className={`image-card-wrapper align-${img.align || 'center'} bottom`}>
                 {renderImageCard(img)}
               </div>
