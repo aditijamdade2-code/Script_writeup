@@ -2,7 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   ArrowLeft, Plus, Trash2, CheckCircle2, Sparkles,
   AlertCircle, RefreshCw, Eye, BookOpen, Clock, FileText, Check, Share2, Copy, Send,
-  Image, Upload, X, Link as LinkIcon, ArrowUp, ArrowDown, Maximize2, Minimize2, GripVertical
+  Image, Upload, X, Link as LinkIcon, ArrowUp, ArrowDown, Maximize2, Minimize2, GripVertical,
+  AlignLeft, AlignCenter, AlignRight
 } from 'lucide-react';
 
 export default function WriterEditor({ bookId, onBackToBookshelf }) {
@@ -341,69 +342,216 @@ export default function WriterEditor({ bookId, onBackToBookshelf }) {
     return url;
   };
 
-  // Cursor position reference for exact insertion
-  const textareaRef = useRef(null);
-  const [savedCursorPos, setSavedCursorPos] = useState(null);
-
-  const updateCursorPos = () => {
-    if (textareaRef.current) {
-      setSavedCursorPos(textareaRef.current.selectionStart);
+  // Auto-clean any legacy image tags out of text so textarea stays 100% clean story prose
+  useEffect(() => {
+    if (text && text.includes('![')) {
+      const cleanedText = text.replace(/!\[([^\]]*)\]\([^)]+\)/g, '').trim();
+      if (cleanedText !== text) {
+        handleTextChange(cleanedText);
+      }
     }
-  };
+  }, [text]);
 
-  // Add Image at Exact Cursor Position (Pushes text after cursor to NEXT LINE after image!)
+  // Add Image to Page Gallery (Default alignment: 'left' so text shifts right)
   const handleInsertImageMark = (url, caption) => {
     if (!url || !selectedChapterId) return;
     const cleanCap = caption ? caption.trim() : 'Illustration';
     const resolvedUrl = resolveImgUrl(url);
 
-    // Format markdown tag: ![Caption|size|align](url)
-    const imageTag = `\n\n![${cleanCap}|medium|center](${resolvedUrl})\n\n`;
+    const newImageObj = {
+      id: `img_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      caption: cleanCap,
+      url: resolvedUrl,
+      position: 'top', // 'top' (above/with text) or 'bottom' (below text)
+      align: 'left', // 'left' (content shifts right) | 'center' | 'right' (content shifts left)
+      size: 'medium' // 'small' | 'medium' | 'full'
+    };
 
-    let pos = text.length;
-    if (savedCursorPos !== null && savedCursorPos !== undefined && savedCursorPos <= text.length) {
-      pos = savedCursorPos;
-    } else if (textareaRef.current && textareaRef.current.selectionStart <= text.length) {
-      pos = textareaRef.current.selectionStart;
-    }
-
-    const before = text.slice(0, pos);
-    const after = text.slice(pos);
-
-    const formattedBefore = before.endsWith('\n') ? before : before + '\n';
-    const formattedAfter = after.startsWith('\n') ? after : '\n' + after;
-
-    const newText = (formattedBefore.trim() + imageTag + formattedAfter.trim()).trim();
-    handleTextChange(newText);
+    setPageImagesMap(prev => {
+      const currentList = prev[selectedChapterId] || [];
+      const updatedList = [...currentList, newImageObj];
+      try {
+        localStorage.setItem(`page_imgs_${selectedChapterId}`, JSON.stringify(updatedList));
+      } catch (e) {
+        console.error('Error saving image list:', e);
+      }
+      return { ...prev, [selectedChapterId]: updatedList };
+    });
 
     // Reset Modal
     setShowImageModal(false);
     setImageUrlInput('');
     setImageCaptionInput('');
-    setSavedCursorPos(null);
   };
 
-  // Update Image Properties (Size, Align, Caption) inside Markdown Tag
-  const handleUpdateMarkdownImage = (rawTag, newSize, newAlign, newCaption) => {
-    const match = rawTag.match(/^!\[([^\]]*)\]\(([^)]+)\)$/);
-    if (!match) return;
-
-    const url = match[2];
-    const parts = match[1].split('|');
-    const cap = newCaption !== undefined ? newCaption : (parts[0] || 'Illustration');
-    const size = newSize !== undefined ? newSize : (parts[1] || 'medium');
-    const align = newAlign !== undefined ? newAlign : (parts[2] || 'center');
-
-    const newTag = `![${cap}|${size}|${align}](${url})`;
-    const updatedText = text.replace(rawTag, newTag);
-    handleTextChange(updatedText);
+  // Update Image Properties (Position, Size, Align)
+  const handleUpdateImageProp = (imgId, key, value) => {
+    if (!selectedChapterId) return;
+    setPageImagesMap(prev => {
+      const currentList = prev[selectedChapterId] || [];
+      const updatedList = currentList.map(img => img.id === imgId ? { ...img, [key]: value } : img);
+      try {
+        localStorage.setItem(`page_imgs_${selectedChapterId}`, JSON.stringify(updatedList));
+      } catch (e) {
+        console.error('Error updating image property:', e);
+      }
+      return { ...prev, [selectedChapterId]: updatedList };
+    });
   };
 
-  // Remove Image from Story Text
-  const handleDeleteMarkdownImage = (rawTag) => {
-    const updatedText = text.replace(rawTag, '').replace(/\n\n\n+/g, '\n\n').trim();
-    handleTextChange(updatedText);
+  // Pointer Drag Handler for Free Image Movement & Direct Dragging on Image
+  const [activeDragImgId, setActiveDragImgId] = useState(null);
+  const dragStartPosRef = useRef({ x: 0, y: 0, initialX: 0, initialY: 0 });
+
+  const handlePointerDown = (e, img) => {
+    // If user clicked inside control overlay buttons, do not initiate card drag
+    if (e.target.closest('button')) return;
+
+    e.stopPropagation();
+    setActiveDragImgId(img.id);
+    dragStartPosRef.current = {
+      x: e.clientX,
+      y: e.clientY,
+      initialX: img.x || 0,
+      initialY: img.y || 0
+    };
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch (err) {}
   };
+
+  const handlePointerMove = (e, img) => {
+    if (activeDragImgId !== img.id) return;
+    e.stopPropagation();
+    const dx = e.clientX - dragStartPosRef.current.x;
+    const dy = e.clientY - dragStartPosRef.current.y;
+    const newX = dragStartPosRef.current.initialX + dx;
+    const newY = dragStartPosRef.current.initialY + dy;
+
+    // Detect horizontal drag direction to dynamically shift alignment (left vs right)
+    let newAlign = img.align || 'left';
+    if (dx > 70) {
+      newAlign = 'right';
+    } else if (dx < -70) {
+      newAlign = 'left';
+    }
+
+    setPageImagesMap(prev => {
+      const currentList = prev[selectedChapterId] || [];
+      const updatedList = currentList.map(item => item.id === img.id ? { ...item, x: newX, y: newY, align: newAlign } : item);
+      return { ...prev, [selectedChapterId]: updatedList };
+    });
+  };
+
+  const handlePointerUp = (e, img) => {
+    if (activeDragImgId !== img.id) return;
+    e.stopPropagation();
+    setActiveDragImgId(null);
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    } catch (err) {}
+
+    const currentList = pageImagesMap[selectedChapterId] || [];
+    try {
+      localStorage.setItem(`page_imgs_${selectedChapterId}`, JSON.stringify(currentList));
+    } catch (err) {}
+  };
+
+  // Reusable Image Card Renderer with Full Card Dragging & Toolbar Alignment
+  const renderImageCard = (img) => (
+    <div
+      key={img.id}
+      className={`page-illustration-card size-${img.size || 'medium'} align-${img.align || 'left'} ${activeDragImgId === img.id ? 'is-dragging' : ''}`}
+      onPointerDown={(e) => handlePointerDown(e, img)}
+      onPointerMove={(e) => handlePointerMove(e, img)}
+      onPointerUp={(e) => handlePointerUp(e, img)}
+      style={{
+        touchAction: 'none',
+        cursor: activeDragImgId === img.id ? 'grabbing' : 'grab'
+      }}
+    >
+      {/* Controls Overlay */}
+      <div className="illustration-controls-overlay" onPointerDown={(e) => e.stopPropagation()}>
+        <button
+          className="img-control-btn"
+          style={{ cursor: 'grab' }}
+          title="Click & drag anywhere on image to move"
+          onPointerDown={(e) => handlePointerDown(e, img)}
+        >
+          <GripVertical size={13} />
+        </button>
+
+        {/* Alignment Toggles */}
+        <button
+          className={`img-control-btn ${img.align === 'left' || !img.align ? 'active' : ''}`}
+          title="Align Left (Content shifts right)"
+          onClick={() => handleUpdateImageProp(img.id, 'align', 'left')}
+        >
+          <AlignLeft size={13} />
+        </button>
+        <button
+          className={`img-control-btn ${img.align === 'center' ? 'active' : ''}`}
+          title="Align Center (Above/Below text)"
+          onClick={() => handleUpdateImageProp(img.id, 'align', 'center')}
+        >
+          <AlignCenter size={13} />
+        </button>
+        <button
+          className={`img-control-btn ${img.align === 'right' ? 'active' : ''}`}
+          title="Align Right (Content shifts left)"
+          onClick={() => handleUpdateImageProp(img.id, 'align', 'right')}
+        >
+          <AlignRight size={13} />
+        </button>
+
+        {/* Position Toggles */}
+        <button
+          className={`img-control-btn ${img.position !== 'bottom' ? 'active' : ''}`}
+          title="Position: Top"
+          onClick={() => handleUpdateImageProp(img.id, 'position', 'top')}
+        >
+          <ArrowUp size={13} />
+        </button>
+        <button
+          className={`img-control-btn ${img.position === 'bottom' ? 'active' : ''}`}
+          title="Position: Bottom"
+          onClick={() => handleUpdateImageProp(img.id, 'position', 'bottom')}
+        >
+          <ArrowDown size={13} />
+        </button>
+
+        {/* Size Toggles */}
+        <button
+          className="img-control-btn"
+          title={`Resize (${img.size || 'medium'})`}
+          onClick={() => {
+            const nextSize = img.size === 'small' ? 'medium' : img.size === 'medium' ? 'full' : 'small';
+            handleUpdateImageProp(img.id, 'size', nextSize);
+          }}
+        >
+          {img.size === 'full' ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
+        </button>
+
+        {/* Trash */}
+        <button
+          className="img-control-btn"
+          title="Remove image from page"
+          onClick={() => handleRemoveImageObj(img.id)}
+        >
+          <Trash2 size={13} />
+        </button>
+      </div>
+
+      <img
+        src={img.url}
+        alt={img.caption}
+        className="illustration-img"
+        draggable={false}
+        onDragStart={(e) => e.preventDefault()}
+      />
+      <div className="illustration-caption">{img.caption || 'Illustration'}</div>
+    </div>
+  );
 
   // Remove Image from Page Gallery
   const handleRemoveImageObj = (imgId) => {
@@ -658,132 +806,49 @@ export default function WriterEditor({ bookId, onBackToBookshelf }) {
             </div>
           </div>
 
-          {/* Text Area Writing Surface */}
+          {/* Text Area Writing Surface & Flowing Illustrations */}
           <div className="editor-body">
-            <div style={{ width: '100%', maxWidth: '760px', display: 'flex', flexDirection: 'column', gap: '24px' }}>
-              
-              {/* 1. Main Author Writing Textarea */}
-              <div style={{ position: 'relative', width: '100%' }}>
-                <textarea
-                  ref={textareaRef}
-                  className="editor-textarea"
-                  placeholder="Write your story here... Place your cursor anywhere in your text and click 'Add Image' to insert an illustration right at that exact line!"
-                  value={text}
-                  onChange={(e) => {
-                    handleTextChange(e.target.value);
-                    updateCursorPos();
-                  }}
-                  onSelect={updateCursorPos}
-                  onClick={updateCursorPos}
-                  onKeyUp={updateCursorPos}
-                  onKeyDown={handleKeyDown}
-                  onDrop={(e) => e.preventDefault()}
-                  onDragOver={(e) => e.preventDefault()}
-                  style={{ minHeight: '400px', width: '100%' }}
-                />
+            {/* Centered Top Page Illustrations */}
+            {currentChapterImages.filter(img => img.position !== 'bottom' && img.align === 'center').length > 0 && (
+              <div className="center-image-wrapper">
+                {currentChapterImages.filter(img => img.position !== 'bottom' && img.align === 'center').map(img => renderImageCard(img))}
               </div>
+            )}
 
-              {/* 2. Visual Book Page Flow (Shows text before image, image block in middle, and text after image on NEXT LINE!) */}
-              {text && text.includes('![') && (
-                <div className="manuscript-preview-container" style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: '28px', width: '100%' }}>
-                  <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '20px' }}>
-                    📖 Visual Book Page Layout (Text flows around image)
-                  </div>
+            {/* Main Canvas Flow Container (Left Images, Text Area, Right Images) */}
+            <div className="editor-canvas-flow">
+              {/* Left-Aligned Images (Text Content Shifts Right) */}
+              {currentChapterImages.filter(img => img.position !== 'bottom' && (img.align === 'left' || !img.align)).length > 0 && (
+                <div className="flow-sidebar-images left-side">
+                  {currentChapterImages.filter(img => img.position !== 'bottom' && (img.align === 'left' || !img.align)).map(img => renderImageCard(img))}
+                </div>
+              )}
 
-                  {(() => {
-                    const regex = /!\[([^\]]*)\]\(([^)]+)\)/g;
-                    const blocks = [];
-                    let lastIndex = 0;
-                    let match;
+              {/* Text Area Writing Surface */}
+              <textarea
+                className="editor-textarea"
+                placeholder="Start writing your chapter here..."
+                value={text}
+                onChange={(e) => handleTextChange(e.target.value)}
+                onKeyDown={handleKeyDown}
+                onDrop={(e) => e.preventDefault()}
+                onDragOver={(e) => e.preventDefault()}
+              />
 
-                    while ((match = regex.exec(text)) !== null) {
-                      if (match.index > lastIndex) {
-                        const prose = text.slice(lastIndex, match.index);
-                        if (prose.trim()) blocks.push({ type: 'text', content: prose });
-                      }
-
-                      const alt = match[1] || 'Illustration';
-                      const url = match[2];
-                      const parts = alt.split('|');
-                      const caption = parts[0] || 'Illustration';
-                      const size = parts[1] || 'medium';
-                      const align = parts[2] || 'center';
-
-                      blocks.push({
-                        type: 'image',
-                        rawTag: match[0],
-                        caption,
-                        size,
-                        align,
-                        url
-                      });
-
-                      lastIndex = regex.lastIndex;
-                    }
-
-                    if (lastIndex < text.length) {
-                      const remaining = text.slice(lastIndex);
-                      if (remaining.trim()) blocks.push({ type: 'text', content: remaining });
-                    }
-
-                    return blocks.map((block, bIdx) => {
-                      if (block.type === 'text') {
-                        return (
-                          <div key={bIdx} style={{ fontFamily: 'var(--font-serif)', fontSize: '1.12rem', lineHeight: '1.85', color: '#e2e8f0', whiteSpace: 'pre-wrap', margin: '16px 0' }}>
-                            {block.content.trim()}
-                          </div>
-                        );
-                      }
-
-                      return (
-                        <div
-                          key={bIdx}
-                          className={`page-illustration-card size-${block.size}`}
-                          style={{
-                            margin: block.align === 'center' ? '24px auto' : block.align === 'left' ? '24px auto 24px 0' : '24px 0 24px auto',
-                            maxWidth: block.size === 'small' ? '260px' : block.size === 'medium' ? '450px' : '100%'
-                          }}
-                        >
-                          {/* Controls Overlay */}
-                          <div className="illustration-controls-overlay">
-                            <button
-                              className="img-control-badge-btn"
-                              title="Click to toggle size: Small ➔ Medium ➔ Full"
-                              onClick={() => {
-                                const nextSize = block.size === 'small' ? 'medium' : block.size === 'medium' ? 'full' : 'small';
-                                handleUpdateMarkdownImage(block.rawTag, nextSize, block.align, block.caption);
-                              }}
-                            >
-                              SIZE: {block.size.toUpperCase()}
-                            </button>
-                            <button
-                              className="img-control-badge-btn"
-                              title="Click to toggle alignment: Left ➔ Center ➔ Right"
-                              onClick={() => {
-                                const nextAlign = block.align === 'center' ? 'left' : block.align === 'left' ? 'right' : 'center';
-                                handleUpdateMarkdownImage(block.rawTag, block.size, nextAlign, block.caption);
-                              }}
-                            >
-                              ALIGN: {block.align.toUpperCase()}
-                            </button>
-                            <button
-                              className="img-control-btn"
-                              title="Remove image from story"
-                              onClick={() => handleDeleteMarkdownImage(block.rawTag)}
-                            >
-                              <Trash2 size={13} />
-                            </button>
-                          </div>
-
-                          <img src={block.url} alt={block.caption} className="illustration-img" />
-                          <div className="illustration-caption">{block.caption || 'Illustration'}</div>
-                        </div>
-                      );
-                    });
-                  })()}
+              {/* Right-Aligned Images (Text Content Shifts Left) */}
+              {currentChapterImages.filter(img => img.position !== 'bottom' && img.align === 'right').length > 0 && (
+                <div className="flow-sidebar-images right-side">
+                  {currentChapterImages.filter(img => img.position !== 'bottom' && img.align === 'right').map(img => renderImageCard(img))}
                 </div>
               )}
             </div>
+
+            {/* Bottom Page Illustrations */}
+            {currentChapterImages.filter(img => img.position === 'bottom').length > 0 && (
+              <div className="center-image-wrapper bottom">
+                {currentChapterImages.filter(img => img.position === 'bottom').map(img => renderImageCard(img))}
+              </div>
+            )}
 
             <div className="editor-footer-stats">
               <span>{wordCount} words &bull; {charCount} characters</span>
