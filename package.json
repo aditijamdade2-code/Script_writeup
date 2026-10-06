@@ -15,12 +15,14 @@
   "type": "commonjs",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.126.0",
-    "better-sqlite3": "^13.0.3",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
     "lucide-react": "^1.47.0",
     "uuid": "^14.0.2"
+  },
+  "optionalDependencies": {
+    "better-sqlite3": "^13.0.3"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^6.1.1",
