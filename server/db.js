@@ -5,11 +5,12 @@ const fs = require('fs');
 let db;
 let isFallback = false;
 
-if (process.env.VERCEL) {
+if (process.env.VERCEL || process.env.NOW_BUILDER) {
   isFallback = true;
 } else {
   try {
-    const Database = require('better-sqlite3');
+    const req = eval('require');
+    const Database = req('better-sqlite3');
     let dbPath = path.join(__dirname, '..', 'data.sqlite');
     db = new Database(dbPath);
     try {
