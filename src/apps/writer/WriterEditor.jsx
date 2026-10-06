@@ -352,17 +352,21 @@ export default function WriterEditor({ bookId, onBackToBookshelf }) {
     }
   }, [text]);
 
-  // Add Image to Page Gallery (Default alignment: 'center' full-width flow)
+  // Add Image to Page Gallery (Default position: 'middle' in between paragraphs)
   const handleInsertImageMark = (url, caption) => {
     if (!url || !selectedChapterId) return;
     const cleanCap = caption ? caption.trim() : 'Illustration';
     const resolvedUrl = resolveImgUrl(url);
 
+    const paras = (text || '').split(/\n\n+/).filter(Boolean);
+    const midIndex = Math.max(1, Math.floor((paras.length || 1) / 2));
+
     const newImageObj = {
       id: `img_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
       caption: cleanCap,
       url: resolvedUrl,
-      position: 'top', // 'top' or 'bottom'
+      position: 'middle', // 'top' | 'middle' | 'bottom'
+      paragraphIndex: midIndex, // Insert in the middle between paragraphs
       align: 'center', // 'left' | 'center' | 'right'
       size: 'medium' // 'small' | 'medium' | 'full'
     };
@@ -384,7 +388,7 @@ export default function WriterEditor({ bookId, onBackToBookshelf }) {
     setImageCaptionInput('');
   };
 
-  // Update Image Properties (Position, Size, Align)
+  // Update Image Properties (Position, Size, Align, ParagraphIndex)
   const handleUpdateImageProp = (imgId, key, value) => {
     if (!selectedChapterId) return;
     setPageImagesMap(prev => {
@@ -434,12 +438,17 @@ export default function WriterEditor({ bookId, onBackToBookshelf }) {
     const newX = dragStartPosRef.current.initialX + dx;
     const newY = dragStartPosRef.current.initialY + dy;
 
-    // Detect vertical drag direction: switch flow position so text moves to top/bottom cleanly
-    let newPos = img.position || 'top';
-    if (dy > 60 && img.position !== 'bottom') {
-      newPos = 'bottom';
-    } else if (dy < -60 && img.position === 'bottom') {
-      newPos = 'top';
+    // Detect vertical drag distance to shift paragraph index (middle / up / down)
+    const currentIdx = img.paragraphIndex !== undefined ? img.paragraphIndex : 1;
+    let newParaIdx = currentIdx;
+    let newPos = img.position || 'middle';
+
+    if (dy > 90) {
+      newParaIdx = currentIdx + 1;
+      newPos = 'middle';
+    } else if (dy < -90) {
+      newParaIdx = Math.max(0, currentIdx - 1);
+      newPos = newParaIdx === 0 ? 'top' : 'middle';
     }
 
     setPageImagesMap(prev => {
@@ -448,6 +457,7 @@ export default function WriterEditor({ bookId, onBackToBookshelf }) {
         ...item,
         x: newX,
         y: newY,
+        paragraphIndex: newParaIdx,
         position: newPos
       } : item);
       return { ...prev, [selectedChapterId]: updatedList };
@@ -478,7 +488,7 @@ export default function WriterEditor({ bookId, onBackToBookshelf }) {
   };
 
   // Reusable Image Card Renderer with Full Card Dragging & Toolbar Alignment
-  const renderImageCard = (img) => (
+  const renderImageCard = (img, totalParas = 1) => (
     <div
       key={img.id}
       className={`page-illustration-card size-${img.size || 'medium'} ${activeDragImgId === img.id ? 'is-dragging' : ''}`}
@@ -505,44 +515,62 @@ export default function WriterEditor({ bookId, onBackToBookshelf }) {
 
         {/* Alignment Toggles */}
         <button
-          className={`img-control-btn ${img.align === 'left' || !img.align ? 'active' : ''}`}
-          title="Align Left (Content shifts right)"
+          className={`img-control-btn ${img.align === 'left' ? 'active' : ''}`}
+          title="Align Left"
           onClick={() => handleUpdateImageProp(img.id, 'align', 'left')}
         >
           <AlignLeft size={13} />
         </button>
         <button
-          className={`img-control-btn ${img.align === 'center' ? 'active' : ''}`}
-          title="Align Center (Above/Below text)"
+          className={`img-control-btn ${img.align === 'center' || !img.align ? 'active' : ''}`}
+          title="Align Center"
           onClick={() => handleUpdateImageProp(img.id, 'align', 'center')}
         >
           <AlignCenter size={13} />
         </button>
         <button
           className={`img-control-btn ${img.align === 'right' ? 'active' : ''}`}
-          title="Align Right (Content shifts left)"
+          title="Align Right"
           onClick={() => handleUpdateImageProp(img.id, 'align', 'right')}
         >
           <AlignRight size={13} />
         </button>
 
-        {/* Position Toggles */}
+        {/* Move Up / Move Down Paragraph Toggles */}
         <button
-          className={`img-control-btn ${img.position !== 'bottom' ? 'active' : ''}`}
-          title="Position: Top"
-          onClick={() => handleUpdateImageProp(img.id, 'position', 'top')}
+          className="img-control-btn"
+          title="Move Up (above paragraph)"
+          onClick={() => {
+            const currentIdx = img.paragraphIndex !== undefined ? img.paragraphIndex : 1;
+            if (currentIdx <= 1) {
+              handleUpdateImageProp(img.id, 'position', 'top');
+              handleUpdateImageProp(img.id, 'paragraphIndex', 0);
+            } else {
+              handleUpdateImageProp(img.id, 'position', 'middle');
+              handleUpdateImageProp(img.id, 'paragraphIndex', currentIdx - 1);
+            }
+          }}
         >
           <ArrowUp size={13} />
         </button>
         <button
-          className={`img-control-btn ${img.position === 'bottom' ? 'active' : ''}`}
-          title="Position: Bottom"
-          onClick={() => handleUpdateImageProp(img.id, 'position', 'bottom')}
+          className="img-control-btn"
+          title="Move Down (below paragraph)"
+          onClick={() => {
+            const currentIdx = img.paragraphIndex !== undefined ? img.paragraphIndex : 1;
+            if (currentIdx >= totalParas) {
+              handleUpdateImageProp(img.id, 'position', 'bottom');
+              handleUpdateImageProp(img.id, 'paragraphIndex', totalParas);
+            } else {
+              handleUpdateImageProp(img.id, 'position', 'middle');
+              handleUpdateImageProp(img.id, 'paragraphIndex', currentIdx + 1);
+            }
+          }}
         >
           <ArrowDown size={13} />
         </button>
 
-        {/* Size Toggles */}
+        {/* Size */}
         <button
           className="img-control-btn"
           title={`Resize (${img.size || 'medium'})`}
