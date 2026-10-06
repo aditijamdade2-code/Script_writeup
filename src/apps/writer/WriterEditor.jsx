@@ -433,38 +433,26 @@ export default function WriterEditor({ bookId, onBackToBookshelf }) {
   const handlePointerMove = (e, img) => {
     if (activeDragImgId !== img.id) return;
     e.stopPropagation();
-    const dx = e.clientX - dragStartPosRef.current.x;
-    const dy = e.clientY - dragStartPosRef.current.y;
-    const newX = dragStartPosRef.current.initialX + dx;
-    const newY = dragStartPosRef.current.initialY + dy;
 
-    // Detect vertical drag distance to shift paragraph index (middle / up / down)
-    const currentIdx = img.paragraphIndex !== undefined ? img.paragraphIndex : 1;
-    let newParaIdx = currentIdx;
-    let newPos = img.position || 'middle';
+    const rawDx = e.clientX - dragStartPosRef.current.x;
+    const rawDy = e.clientY - dragStartPosRef.current.y;
 
-    if (dy > 90) {
-      newParaIdx = currentIdx + 1;
-      newPos = 'middle';
-    } else if (dy < -90) {
-      newParaIdx = Math.max(0, currentIdx - 1);
-      newPos = newParaIdx === 0 ? 'top' : 'middle';
-    }
+    // Clamp visual drag displacement to smooth bounds so image NEVER shoots out of frame
+    const clampedX = Math.max(-220, Math.min(220, dragStartPosRef.current.initialX + rawDx));
+    const clampedY = Math.max(-160, Math.min(160, dragStartPosRef.current.initialY + rawDy));
 
     setPageImagesMap(prev => {
       const currentList = prev[selectedChapterId] || [];
       const updatedList = currentList.map(item => item.id === img.id ? {
         ...item,
-        x: newX,
-        y: newY,
-        paragraphIndex: newParaIdx,
-        position: newPos
+        x: clampedX,
+        y: clampedY
       } : item);
       return { ...prev, [selectedChapterId]: updatedList };
     });
   };
 
-  const handlePointerUp = (e, img) => {
+  const handlePointerUp = (e, img, totalParas = 1) => {
     if (activeDragImgId !== img.id) return;
     e.stopPropagation();
     setActiveDragImgId(null);
@@ -472,13 +460,49 @@ export default function WriterEditor({ bookId, onBackToBookshelf }) {
       e.currentTarget.releasePointerCapture(e.pointerId);
     } catch (err) {}
 
-    // On drag release, snap cleanly into layout flow (x:0, y:0) so image never covers text
+    // Evaluate total displacement on drag release
+    const finalX = img.x || 0;
+    const finalY = img.y || 0;
+
+    const currentIdx = img.paragraphIndex !== undefined ? img.paragraphIndex : 1;
+    let newParaIdx = currentIdx;
+    let newPos = img.position || 'middle';
+
+    if (finalY > 50) {
+      if (currentIdx >= totalParas) {
+        newPos = 'bottom';
+        newParaIdx = totalParas;
+      } else {
+        newParaIdx = currentIdx + 1;
+        newPos = 'middle';
+      }
+    } else if (finalY < -50) {
+      if (currentIdx <= 1) {
+        newPos = 'top';
+        newParaIdx = 0;
+      } else {
+        newParaIdx = currentIdx - 1;
+        newPos = 'middle';
+      }
+    }
+
+    let newAlign = img.align || 'center';
+    if (finalX > 80) {
+      newAlign = 'right';
+    } else if (finalX < -80) {
+      newAlign = 'left';
+    }
+
+    // Reset x and y offsets back to 0 so it snaps perfectly in layout flow without lingering off-screen transforms!
     setPageImagesMap(prev => {
       const currentList = prev[selectedChapterId] || [];
       const updatedList = currentList.map(item => item.id === img.id ? {
         ...item,
         x: 0,
-        y: 0
+        y: 0,
+        position: newPos,
+        paragraphIndex: newParaIdx,
+        align: newAlign
       } : item);
       try {
         localStorage.setItem(`page_imgs_${selectedChapterId}`, JSON.stringify(updatedList));
@@ -494,7 +518,7 @@ export default function WriterEditor({ bookId, onBackToBookshelf }) {
       className={`page-illustration-card size-${img.size || 'medium'} ${activeDragImgId === img.id ? 'is-dragging' : ''}`}
       onPointerDown={(e) => handlePointerDown(e, img)}
       onPointerMove={(e) => handlePointerMove(e, img)}
-      onPointerUp={(e) => handlePointerUp(e, img)}
+      onPointerUp={(e) => handlePointerUp(e, img, totalParas)}
       style={{
         touchAction: 'none',
         cursor: activeDragImgId === img.id ? 'grabbing' : 'grab',
