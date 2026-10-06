@@ -176,20 +176,22 @@ export default function PublishedReaderView({ bookId, onGoToEditor, onBackToBook
         <p style={{ color: '#94a3b8', maxWidth: '420px', marginBottom: '24px' }}>
           {error || 'This book could not be found or has no published chapters.'}
         </p>
-        <button
-          onClick={onBackToBookshelf}
-          style={{
-            padding: '10px 20px',
-            borderRadius: '999px',
-            background: '#6366f1',
-            color: '#fff',
-            border: 'none',
-            fontWeight: 600,
-            cursor: 'pointer'
-          }}
-        >
-          Return to Bookshelf
-        </button>
+        {onBackToBookshelf && (
+          <button
+            onClick={onBackToBookshelf}
+            style={{
+              padding: '10px 20px',
+              borderRadius: '999px',
+              background: '#6366f1',
+              color: '#fff',
+              border: 'none',
+              fontWeight: 600,
+              cursor: 'pointer'
+            }}
+          >
+            Return to Bookshelf
+          </button>
+        )}
       </div>
     );
   }
@@ -324,23 +326,25 @@ export default function PublishedReaderView({ bookId, onGoToEditor, onBackToBook
         boxShadow: '0 2px 10px rgba(0,0,0,0.05)'
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-          <button
-            onClick={onBackToBookshelf}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '6px 12px',
-              borderRadius: '999px',
-              border: `1px solid ${themeStyles.border}`,
-              background: 'transparent',
-              color: themeStyles.text,
-              fontSize: '0.85rem',
-              cursor: 'pointer'
-            }}
-          >
-            <ArrowLeft size={16} /> Bookshelf
-          </button>
+          {onBackToBookshelf && (
+            <button
+              onClick={onBackToBookshelf}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '6px 12px',
+                borderRadius: '999px',
+                border: `1px solid ${themeStyles.border}`,
+                background: 'transparent',
+                color: themeStyles.text,
+                fontSize: '0.85rem',
+                cursor: 'pointer'
+              }}
+            >
+              <ArrowLeft size={16} /> Bookshelf
+            </button>
+          )}
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <BookOpen size={18} style={{ color: themeStyles.accent }} />

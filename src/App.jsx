@@ -29,8 +29,6 @@ export default function App() {
     return (
       <PublishedReaderView
         bookId={bookId}
-        onBackToBookshelf={() => navigateTo('/')}
-        onGoToEditor={() => navigateTo(`/writer/book/${bookId}`)}
       />
     );
   }
