@@ -856,33 +856,62 @@ export default function WriterEditor({ bookId, onBackToBookshelf }) {
             </div>
           </div>
 
-          {/* Text Area Writing Surface & Flowing Illustrations */}
-          {/* Text Area Writing Surface & Full-Width Illustrations */}
+          {/* Text Area Writing Surface & Middle Flowing Illustrations */}
           <div className="editor-body">
-            {/* Top Page Illustrations */}
-            {currentChapterImages.filter(img => img.position !== 'bottom').map(img => (
-              <div key={img.id} className={`image-card-wrapper align-${img.align || 'center'}`}>
-                {renderImageCard(img)}
-              </div>
-            ))}
+            {(() => {
+              const rawParas = (text || '').split(/\r?\n\s*\r?\n/);
+              const paras = rawParas.length > 0 && rawParas[0] !== '' ? rawParas : [text || ''];
 
-            {/* Full-Width Textarea Canvas */}
-            <textarea
-              className="editor-textarea"
-              placeholder="Start writing your chapter here..."
-              value={text}
-              onChange={(e) => handleTextChange(e.target.value)}
-              onKeyDown={handleKeyDown}
-              onDrop={(e) => e.preventDefault()}
-              onDragOver={(e) => e.preventDefault()}
-            />
+              const renderImagesForSlot = (slotIndex) => {
+                return currentChapterImages
+                  .filter(img => {
+                    // Explicit Top
+                    if (slotIndex === 0 && img.position === 'top') return true;
+                    // Explicit Bottom
+                    if (slotIndex === paras.length && img.position === 'bottom') return true;
+                    // Middle / Default position: place at paragraphIndex or midIndex
+                    const targetIndex = img.paragraphIndex !== undefined ? img.paragraphIndex : Math.max(1, Math.floor(paras.length / 2));
+                    if ((img.position === 'middle' || !img.position) && targetIndex === slotIndex) return true;
+                    // Fallback for top/bottom if slot out of range
+                    if (img.position === 'top' && slotIndex === 0) return true;
+                    if (img.position === 'bottom' && slotIndex === paras.length) return true;
+                    return false;
+                  })
+                  .map(img => (
+                    <div key={img.id} className={`image-card-wrapper align-${img.align || 'center'}`}>
+                      {renderImageCard(img, paras.length)}
+                    </div>
+                  ));
+              };
 
-            {/* Bottom Page Illustrations */}
-            {currentChapterImages.filter(img => img.position === 'bottom').map(img => (
-              <div key={img.id} className={`image-card-wrapper align-${img.align || 'center'} bottom`}>
-                {renderImageCard(img)}
-              </div>
-            ))}
+              return (
+                <>
+                  {/* Top Images (Slot 0) */}
+                  {renderImagesForSlot(0)}
+
+                  {/* Paragraph Textareas and Middle Images */}
+                  {paras.map((paraText, idx) => (
+                    <React.Fragment key={idx}>
+                      <textarea
+                        className="editor-textarea paragraph-textarea"
+                        placeholder={idx === 0 ? "Start writing your chapter here..." : "Continue writing..."}
+                        value={paraText}
+                        onChange={(e) => {
+                          const updatedParas = [...paras];
+                          updatedParas[idx] = e.target.value;
+                          handleTextChange(updatedParas.join('\n\n'));
+                        }}
+                        onKeyDown={handleKeyDown}
+                        onDrop={(e) => e.preventDefault()}
+                        onDragOver={(e) => e.preventDefault()}
+                      />
+                      {/* Images in the Middle after this paragraph */}
+                      {renderImagesForSlot(idx + 1)}
+                    </React.Fragment>
+                  ))}
+                </>
+              );
+            })()}
 
             <div className="editor-footer-stats">
               <span>{wordCount} words &bull; {charCount} characters</span>

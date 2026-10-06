@@ -484,13 +484,18 @@
 .editor-textarea {
   width: 100%;
   max-width: 760px;
-  min-height: 500px;
+  min-height: 120px;
   font-family: var(--font-serif);
   font-size: 1.18rem;
   line-height: 1.8;
   color: #e2e8f0;
   resize: none;
   background: transparent;
+}
+
+.paragraph-textarea {
+  min-height: 90px;
+  margin-bottom: 8px;
 }
 
 .editor-textarea::placeholder {
