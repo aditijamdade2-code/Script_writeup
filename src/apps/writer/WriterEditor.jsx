@@ -6,11 +6,12 @@ import {
   AlignLeft, AlignCenter, AlignRight
 } from 'lucide-react';
 
-export default function WriterEditor({ bookId, onBackToBookshelf }) {
+export default function WriterEditor({ bookId, onBackToBookshelf, onViewPublished }) {
   const [book, setBook] = useState(null);
   const [chapters, setChapters] = useState([]);
   const [selectedChapterId, setSelectedChapterId] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [showPublishModal, setShowPublishModal] = useState(false);
   
   // Active Chapter Form State
   const [title, setTitle] = useState('');
@@ -682,12 +683,13 @@ export default function WriterEditor({ bookId, onBackToBookshelf }) {
   // Current page images list
   const currentChapterImages = pageImagesMap[selectedChapterId] || [];
 
-  // Copy Direct Link to Manuscript
+  // Copy Direct Link to Published Reader
   const [copiedLink, setCopiedLink] = useState(false);
   const handleCopyShareLink = () => {
-    const url = window.location.href;
-    navigator.clipboard.writeText(url);
+    const publishedUrl = `${window.location.origin}/read/${bookId}`;
+    navigator.clipboard.writeText(publishedUrl);
     setCopiedLink(true);
+    setShowPublishModal(true);
     setTimeout(() => setCopiedLink(false), 3000);
   };
 
@@ -739,18 +741,24 @@ export default function WriterEditor({ bookId, onBackToBookshelf }) {
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          {onViewPublished && (
+            <button
+              className="reader-tool-btn"
+              onClick={onViewPublished}
+              title="Preview Published Story as a Reader"
+            >
+              <Eye size={16} /> Preview Story
+            </button>
+          )}
+
           <button
-            className="reader-tool-btn"
-            style={{
-              background: copiedLink ? 'rgba(16, 185, 129, 0.15)' : undefined,
-              borderColor: copiedLink ? 'var(--accent-emerald)' : undefined,
-              color: copiedLink ? 'var(--accent-emerald)' : undefined
-            }}
+            className="confirm-btn"
+            style={{ padding: '6px 16px', fontSize: '0.85rem' }}
             onClick={handleCopyShareLink}
-            title="Copy direct link to this manuscript"
+            title="Publish & Copy Public Reader Link"
           >
             {copiedLink ? <Check size={16} /> : <Share2 size={16} />}
-            {copiedLink ? 'Link Copied!' : 'Copy Link'}
+            {copiedLink ? 'Link Copied!' : 'Publish & Share'}
           </button>
         </div>
       </header>
@@ -1149,6 +1157,174 @@ export default function WriterEditor({ bookId, onBackToBookshelf }) {
                   </button>
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Publish & Share Success Popup Modal */}
+      {showPublishModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.75)',
+          backdropFilter: 'blur(6px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 9999,
+          padding: '24px'
+        }}>
+          <div style={{
+            background: 'var(--bg-card, #161927)',
+            border: '1px solid var(--border-subtle, rgba(255,255,255,0.12))',
+            borderRadius: '24px',
+            width: '100%',
+            maxWidth: '520px',
+            padding: '36px 32px',
+            boxShadow: '0 24px 60px rgba(0,0,0,0.6)',
+            position: 'relative',
+            color: 'var(--text-primary, #fff)',
+            textAlign: 'center'
+          }}>
+            <button
+              onClick={() => setShowPublishModal(false)}
+              style={{
+                position: 'absolute',
+                top: '18px',
+                right: '18px',
+                background: 'rgba(255,255,255,0.08)',
+                border: 'none',
+                color: 'var(--text-muted, #94a3b8)',
+                borderRadius: '999px',
+                width: '32px',
+                height: '32px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer'
+              }}
+            >
+              <X size={18} />
+            </button>
+
+            <div style={{
+              width: '64px',
+              height: '64px',
+              borderRadius: '999px',
+              background: 'rgba(16, 185, 129, 0.15)',
+              color: '#10b981',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              margin: '0 auto 20px',
+              border: '1px solid rgba(16, 185, 129, 0.3)'
+            }}>
+              <CheckCircle2 size={36} />
+            </div>
+
+            <h2 style={{ fontSize: '1.65rem', fontWeight: 800, marginBottom: '8px' }}>
+              Your Story Link is Live!
+            </h2>
+            <p style={{ color: 'var(--text-secondary, #94a3b8)', fontSize: '0.95rem', marginBottom: '24px', lineHeight: '1.5' }}>
+              Readers visiting this link will see your published manuscript in clean public reader mode without editing tools.
+            </p>
+
+            {/* Published Link Input Box */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              background: 'var(--bg-secondary, #0d0f17)',
+              border: '1px solid var(--border-subtle, rgba(255,255,255,0.12))',
+              borderRadius: '14px',
+              padding: '10px 14px',
+              marginBottom: '24px'
+            }}>
+              <input
+                readOnly
+                value={`${window.location.origin}/read/${bookId}`}
+                style={{
+                  flex: 1,
+                  background: 'transparent',
+                  border: 'none',
+                  color: 'var(--accent-emerald, #10b981)',
+                  fontWeight: 600,
+                  fontSize: '0.92rem',
+                  outline: 'none',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis'
+                }}
+              />
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(`${window.location.origin}/read/${bookId}`);
+                  setCopiedLink(true);
+                  setTimeout(() => setCopiedLink(false), 3000);
+                }}
+                style={{
+                  padding: '8px 16px',
+                  borderRadius: '10px',
+                  background: copiedLink ? '#10b981' : 'var(--accent-primary, #6366f1)',
+                  color: '#fff',
+                  border: 'none',
+                  fontWeight: 600,
+                  fontSize: '0.85rem',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  whiteSpace: 'nowrap'
+                }}
+              >
+                {copiedLink ? <Check size={16} /> : <Copy size={16} />}
+                {copiedLink ? 'Copied!' : 'Copy Link'}
+              </button>
+            </div>
+
+            {/* Modal Action Buttons */}
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <button
+                onClick={() => {
+                  setShowPublishModal(false);
+                  if (onViewPublished) onViewPublished();
+                }}
+                style={{
+                  flex: 1,
+                  padding: '12px',
+                  borderRadius: '12px',
+                  background: 'var(--accent-primary, #6366f1)',
+                  color: '#fff',
+                  border: 'none',
+                  fontWeight: 600,
+                  fontSize: '0.95rem',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px'
+                }}
+              >
+                <Eye size={18} /> Open Published Reader
+              </button>
+              <button
+                onClick={() => setShowPublishModal(false)}
+                style={{
+                  padding: '12px 24px',
+                  borderRadius: '12px',
+                  background: 'transparent',
+                  border: '1px solid var(--border-subtle, rgba(255,255,255,0.15))',
+                  color: 'var(--text-secondary, #94a3b8)',
+                  fontWeight: 600,
+                  fontSize: '0.95rem',
+                  cursor: 'pointer'
+                }}
+              >
+                Done
+              </button>
             </div>
           </div>
         </div>

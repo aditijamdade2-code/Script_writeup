@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { BookOpen, Plus, Trash2, Sparkles, FileText, Share2, Check } from 'lucide-react';
 
-export default function WriterBookshelf({ onSelectBook }) {
+export default function WriterBookshelf({ onSelectBook, onViewPublished }) {
   const [books, setBooks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
@@ -10,8 +10,8 @@ export default function WriterBookshelf({ onSelectBook }) {
 
   const handleCopyLink = (e, bookId) => {
     e.stopPropagation();
-    const url = `${window.location.origin}/writer/book/${bookId}`;
-    navigator.clipboard.writeText(url);
+    const publishedUrl = `${window.location.origin}/read/${bookId}`;
+    navigator.clipboard.writeText(publishedUrl);
     setCopiedBookId(bookId);
     setTimeout(() => setCopiedBookId(null), 3000);
   };
