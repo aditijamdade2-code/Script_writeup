@@ -431,6 +431,7 @@ export default function WriterEditor({ bookId, onBackToBookshelf, onViewPublishe
     });
 
     // Reset Modal
+    setUploadingImage(false);
     setShowImageModal(false);
     setImageUrlInput('');
     setImageCaptionInput('');
@@ -878,7 +879,10 @@ export default function WriterEditor({ bookId, onBackToBookshelf, onViewPublishe
               {/* Insert Image Button */}
               <button
                 className="reader-tool-btn"
-                onClick={() => setShowImageModal(true)}
+                onClick={() => {
+                  setUploadingImage(false);
+                  setShowImageModal(true);
+                }}
                 title="Insert image or illustration into page"
               >
                 <Image size={16} />
