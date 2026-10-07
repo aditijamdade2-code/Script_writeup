@@ -282,7 +282,9 @@ router.post('/upload-image', (req, res) => {
     }
 
     const uniqueName = `img_${uuidv4().slice(0, 8)}.${ext}`;
-    const uploadsDir = path.join(__dirname, '../..', 'uploads');
+    const uploadsDir = process.env.VERCEL
+      ? path.join('/tmp', 'uploads')
+      : path.join(__dirname, '../..', 'uploads');
 
     if (!fs.existsSync(uploadsDir)) {
       fs.mkdirSync(uploadsDir, { recursive: true });

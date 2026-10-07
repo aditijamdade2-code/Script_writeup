@@ -323,22 +323,66 @@ export default function WriterEditor({ bookId, onBackToBookshelf, onViewPublishe
     }
   }, [selectedChapterId]);
 
+  // Image Compression helper to prevent LocalStorage/Memory quota errors with large PNG files
+  const compressImageFile = (file) => {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const dataUrl = e.target.result;
+        const img = new Image();
+        img.onload = () => {
+          const maxDim = 1200;
+          let width = img.width;
+          let height = img.height;
+
+          if (width > maxDim || height > maxDim) {
+            if (width > height) {
+              height = Math.round((height * maxDim) / width);
+              width = maxDim;
+            } else {
+              width = Math.round((width * maxDim) / height);
+              height = maxDim;
+            }
+          }
+
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, width, height);
+
+          // Use PNG format if original file was PNG, otherwise JPEG
+          const mimeType = file.type === 'image/png' ? 'image/png' : 'image/jpeg';
+          const compressed = canvas.toDataURL(mimeType, 0.88);
+          resolve(compressed);
+        };
+        img.onerror = () => resolve(dataUrl);
+        img.src = dataUrl;
+      };
+      reader.onerror = () => resolve(null);
+      reader.readAsDataURL(file);
+    });
+  };
+
   // Local storage helper for image data URLs
   const storeLocalBase64 = (base64) => {
+    if (!base64) return '';
     const key = `script_img_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
     try {
       localStorage.setItem(key, base64);
+      return `/local-img/${key}`;
     } catch (e) {
-      console.warn('LocalStorage limit reached', e);
+      console.warn('LocalStorage limit reached, storing raw data URL fallback', e);
+      return base64; // Return raw data URL directly so image displays 100% reliably!
     }
-    return `/local-img/${key}`;
   };
 
   const resolveImgUrl = (url) => {
     if (!url) return '';
     if (url.startsWith('/local-img/')) {
       const key = url.replace('/local-img/', '');
-      return localStorage.getItem(key) || '';
+      const stored = localStorage.getItem(key);
+      if (stored) return stored;
     }
     return url;
   };
@@ -650,32 +694,29 @@ export default function WriterEditor({ bookId, onBackToBookshelf, onViewPublishe
 
     try {
       setUploadingImage(true);
-      const reader = new FileReader();
-      reader.onload = async (event) => {
-        const base64Data = event.target.result;
-        try {
-          const res = await fetch('/api/writer/upload-image', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ imageBase64: base64Data })
-          });
-          if (res.ok) {
-            const data = await res.json();
-            handleInsertImageMark(data.url, imageCaptionInput || file.name);
-          } else {
-            const shortUrl = storeLocalBase64(base64Data);
-            handleInsertImageMark(shortUrl, imageCaptionInput || file.name);
-          }
-        } catch (err) {
-          const shortUrl = storeLocalBase64(base64Data);
+      const compressedDataUrl = await compressImageFile(file);
+      if (!compressedDataUrl) throw new Error('Failed to process image file');
+
+      try {
+        const res = await fetch('/api/writer/upload-image', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ imageBase64: compressedDataUrl })
+        });
+        if (res.ok) {
+          const data = await res.json();
+          handleInsertImageMark(data.url, imageCaptionInput || file.name);
+        } else {
+          const shortUrl = storeLocalBase64(compressedDataUrl);
           handleInsertImageMark(shortUrl, imageCaptionInput || file.name);
-        } finally {
-          setUploadingImage(false);
         }
-      };
-      reader.readAsDataURL(file);
+      } catch (err) {
+        const shortUrl = storeLocalBase64(compressedDataUrl);
+        handleInsertImageMark(shortUrl, imageCaptionInput || file.name);
+      }
     } catch (err) {
-      alert('Error reading file: ' + err.message);
+      alert('Error processing image file: ' + err.message);
+    } finally {
       setUploadingImage(false);
     }
   };
