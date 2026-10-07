@@ -323,7 +323,7 @@ export default function WriterEditor({ bookId, onBackToBookshelf, onViewPublishe
     }
   }, [selectedChapterId]);
 
-  // Image Compression helper to prevent LocalStorage/Memory quota errors with large PNG files
+  // Image Compression helper to prevent LocalStorage/Vercel payload quota errors with large PNG files
   const compressImageFile = (file) => {
     return new Promise((resolve) => {
       const reader = new FileReader();
@@ -349,11 +349,14 @@ export default function WriterEditor({ bookId, onBackToBookshelf, onViewPublishe
           canvas.width = width;
           canvas.height = height;
           const ctx = canvas.getContext('2d');
+          
+          // Fill white background for clean PNG transparency handling
+          ctx.fillStyle = '#FFFFFF';
+          ctx.fillRect(0, 0, width, height);
           ctx.drawImage(img, 0, 0, width, height);
 
-          // Use PNG format if original file was PNG, otherwise JPEG
-          const mimeType = file.type === 'image/png' ? 'image/png' : 'image/jpeg';
-          const compressed = canvas.toDataURL(mimeType, 0.88);
+          // Compress to JPEG 0.85 quality to guarantee < 250KB payload under Vercel serverless limit
+          const compressed = canvas.toDataURL('image/jpeg', 0.85);
           resolve(compressed);
         };
         img.onerror = () => resolve(dataUrl);
