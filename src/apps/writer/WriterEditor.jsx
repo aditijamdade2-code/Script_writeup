@@ -369,7 +369,7 @@ export default function WriterEditor({ bookId, onBackToBookshelf, onViewPublishe
       position: 'middle', // 'top' | 'middle' | 'bottom'
       paragraphIndex: midIndex, // Insert in the middle between paragraphs
       align: 'center', // 'left' | 'center' | 'right'
-      size: 'medium' // 'small' | 'medium' | 'full'
+      size: 'full' // 'small' | 'medium' | 'full'
     };
 
     setPageImagesMap(prev => {

@@ -224,8 +224,11 @@ export default function PublishedReaderView({ bookId, onGoToEditor, onBackToBook
               src={img.url}
               alt={img.caption}
               style={{
-                maxWidth: img.size === 'small' ? '300px' : img.size === 'full' ? '100%' : '520px',
+                maxWidth: img.size === 'small' ? '45%' : img.size === 'medium' ? '75%' : '100%',
                 width: '100%',
+                height: 'auto',
+                maxHeight: '650px',
+                objectFit: 'contain',
                 borderRadius: '12px',
                 boxShadow: '0 8px 24px rgba(0,0,0,0.2)'
               }}
@@ -261,8 +264,11 @@ export default function PublishedReaderView({ bookId, onGoToEditor, onBackToBook
                     src={img.url}
                     alt={img.caption}
                     style={{
-                      maxWidth: img.size === 'small' ? '300px' : img.size === 'full' ? '100%' : '520px',
+                      maxWidth: img.size === 'small' ? '45%' : img.size === 'medium' ? '75%' : '100%',
                       width: '100%',
+                      height: 'auto',
+                      maxHeight: '650px',
+                      objectFit: 'contain',
                       borderRadius: '12px',
                       boxShadow: '0 8px 24px rgba(0,0,0,0.2)'
                     }}
@@ -285,8 +291,11 @@ export default function PublishedReaderView({ bookId, onGoToEditor, onBackToBook
               src={img.url}
               alt={img.caption}
               style={{
-                maxWidth: img.size === 'small' ? '300px' : img.size === 'full' ? '100%' : '520px',
+                maxWidth: img.size === 'small' ? '45%' : img.size === 'medium' ? '75%' : '100%',
                 width: '100%',
+                height: 'auto',
+                maxHeight: '650px',
+                objectFit: 'contain',
                 borderRadius: '12px',
                 boxShadow: '0 8px 24px rgba(0,0,0,0.2)'
               }}
